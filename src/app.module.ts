@@ -1,0 +1,21 @@
+import { Module } from '@nestjs/common';
+import { PrismaModule } from './prisma/prisma.module.js';
+import { StorageModule } from './storage/storage.module.js';
+import { AuthModule } from './auth/auth.module.js';
+import { SearchModule } from './search/search.module.js';
+import { GraphModule } from './graph/graph.module.js';
+import { MemoireModule } from './memoire/memoire.module.js';
+import { AnalyticsModule } from './analytics/analytics.module.js';
+
+@Module({
+  imports: [
+    PrismaModule,
+    StorageModule,
+    AuthModule,
+    SearchModule,
+    GraphModule,
+    MemoireModule,
+    AnalyticsModule,
+  ],
+})
+export class AppModule {}
