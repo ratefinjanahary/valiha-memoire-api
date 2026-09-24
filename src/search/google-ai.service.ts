@@ -5,7 +5,7 @@ import { GoogleGenAI } from '@google/genai';
 export class GoogleAiService {
   private readonly logger = new Logger(GoogleAiService.name);
   private readonly ai: GoogleGenAI;
-  private readonly embeddingModel = 'text-embedding-004';
+  private readonly embeddingModel = 'gemini-embedding-001';
 
   constructor() {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -17,14 +17,20 @@ export class GoogleAiService {
 
   async generateEmbedding(text: string): Promise<number[]> {
     try {
+      this.logger.debug(`Generating embedding for text (${text.length} chars)...`);
       const response = await this.ai.models.embedContent({
         model: this.embeddingModel,
         contents: text,
       });
-      return response.embeddings?.[0]?.values || [];
-    } catch (error) {
-      this.logger.error('Failed to generate embedding', error);
-      throw new Error("Erreur lors de la génération de l'embedding");
+      const values = response.embeddings?.[0]?.values || [];
+      this.logger.debug(`Embedding generated successfully: ${values.length} dimensions`);
+      return values;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to generate embedding: ${error?.message || error}`,
+        error?.stack,
+      );
+      throw new Error(`Erreur lors de la génération de l'embedding: ${error?.message}`);
     }
   }
 }

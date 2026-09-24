@@ -6,8 +6,9 @@ import 'multer';
 import type { IFileStorage } from '../storage/storage.interface.js';
 import { FILE_STORAGE_SERVICE } from '../storage/storage.module.js';
 import { StatutMemoire, TypeDiplome } from '@prisma/client';
-// @ts-ignore
-import pdfParse from 'pdf-parse';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
 import { SubmitMemoireDto } from './dto/submit-memoire.dto.js';
 
 @Injectable()

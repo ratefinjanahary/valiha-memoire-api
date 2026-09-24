@@ -110,7 +110,7 @@ model Memoire {
   auteurPrenom    String        @map("auteur_prenom")
   auteurEmail     String?       @map("auteur_email")
 
-  embedding       Unsupported("vector(768)")?
+  embedding       Unsupported("vector(3072)")?
 
   soumisParId     String        @map("soumis_par_id")
   soumisPar       User          @relation("AuteurSoumission", fields: [soumisParId], references: [id])
