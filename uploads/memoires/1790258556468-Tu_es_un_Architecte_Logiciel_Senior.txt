@@ -1,0 +1,241 @@
+Tu es un Architecte Logiciel Senior expert en Node.js, TypeScript, PostgreSQL et IA.
+Tu dois générer l'intégralité du code source du backend pour le projet "VALIHA-Memoire" (Plateforme Nationale de Valorisation et d'Exploration Visualisée du Patrimoine Académique de Madagascar).
+
+### Stack Technique & Dépendances
+- Runtime/Framework : Node.js avec TypeScript, NestJS, Zod.
+- Base de Données & ORM : PostgreSQL + extension `pgvector` activée, accédée via Prisma ORM.
+- AI Studio : Intégration du SDK `@google/genai` (ou `@google/generative-ai`) avec la clé d'API `GEMINI_API_KEY`. Modèle d'embedding : `text-embedding-004` (vecteurs à 768 dimensions).
+- Authentification : JWT avec hachage de mots de passe via `bcryptjs`.
+- Traitement de fichiers : `multer` (ou équivalent) pour la réception du PDF, `pdf-parse` pour l'extraction du texte brut du résumé.
+
+---
+
+### Schéma Prisma de Référence
+Génère le backend en te basant exactement sur le schéma Prisma suivant :
+- Rôles (RBAC) : PUBLIC, ETUDIANT, DOCUMENTALISTE, ADMIN.
+- Statuts Mémoire : BROUILLON, EN_ATTENTE_MODERATION, VALIDE, REJETTE.
+- Modèles : User, Universite, Domaine, Encadreur, MotCle, Memoire, MemoireEncadreur, MemoireMotCle, Consultation, AuditLog.
+- Schéma prisma à utiliser :
+	datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+enum Role {
+  PUBLIC
+  ETUDIANT
+  DOCUMENTALISTE
+  ADMIN
+}
+
+enum StatutMemoire {
+  BROUILLON
+  EN_ATTENTE_MODERATION
+  VALIDE
+  REJETTE
+}
+
+enum TypeDiplome {
+  LICENCE
+  MASTER
+  DOCTORAT
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  nom          String
+  prenom       String
+  role         Role     @default(PUBLIC)
+  isActif      Boolean  @default(true) @map("is_actif")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  memoiresSoumis Memoire[]  @relation("AuteurSoumission")
+  historiqueLogs AuditLog[]
+
+  @@map("users")
+}
+
+model Universite {
+  id        String   @id @default(uuid())
+  nom       String   @unique
+  sigle     String?
+  ville     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  memoires Memoire[]
+
+  @@map("universites")
+}
+
+model Domaine {
+  id          String   @id @default(uuid())
+  nom         String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  memoires Memoire[]
+
+  @@map("domaines")
+}
+
+model Encadreur {
+  id        String   @id @default(uuid())
+  nom       String
+  prenom    String
+  titre     String?
+  email     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  memoires MemoireEncadreur[]
+
+  @@map("encadreurs")
+}
+
+model MotCle {
+  id        String   @id @default(uuid())
+  libelle   String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  memoires MemoireMotCle[]
+
+  @@map("mots_cles")
+}
+
+model Memoire {
+  id              String        @id @default(uuid())
+  titre           String
+  resume          String        @db.Text
+  anneeSoutenance Int           @map("annee_soutenance")
+  typeDiplome     TypeDiplome   @default(LICENCE) @map("type_diplome")
+  statut          StatutMemoire @default(EN_ATTENTE_MODERATION)
+  motifRejet      String?       @db.Text @map("motif_rejet")
+
+  pdfUrl          String        @map("pdf_url")
+  pdfPathLocal    String?       @map("pdf_path_local")
+  nbPages         Int?          @map("nb_pages")
+  tailleFichier   Int?          @map("taille_fichier")
+
+  auteurNom       String        @map("auteur_nom")
+  auteurPrenom    String        @map("auteur_prenom")
+  auteurEmail     String?       @map("auteur_email")
+
+  embedding       Unsupported("vector(768)")?
+
+  soumisParId     String        @map("soumis_par_id")
+  soumisPar       User          @relation("AuteurSoumission", fields: [soumisParId], references: [id])
+
+  universiteId    String        @map("universite_id")
+  universite      Universite    @relation(fields: [universiteId], references: [id])
+
+  domaineId       String        @map("domaine_id")
+  domaine         Domaine       @relation(fields: [domaineId], references: [id])
+
+  encadreurs      MemoireEncadreur[]
+  motsCles        MemoireMotCle[]
+  consultations   Consultation[]
+
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@map("memoires")
+}
+
+model MemoireEncadreur {
+  memoireId   String @map("memoire_id")
+  encadreurId String @map("encadreur_id")
+  role        String?
+
+  memoire   Memoire   @relation(fields: [memoireId], references: [id], onDelete: Cascade)
+  encadreur Encadreur @relation(fields: [encadreurId], references: [id], onDelete: Cascade)
+
+  @@id([memoireId, encadreurId])
+  @@map("memoire_encadreurs")
+}
+
+model MemoireMotCle {
+  memoireId String @map("memoire_id")
+  motCleId  String @map("mot_cle_id")
+
+  memoire Memoire @relation(fields: [memoireId], references: [id], onDelete: Cascade)
+  motCle  MotCle  @relation(fields: [motCleId], references: [id], onDelete: Cascade)
+
+  @@id([memoireId, motCleId])
+  @@map("memoire_mots_cles")
+}
+
+model Consultation {
+  id          String   @id @default(uuid())
+  memoireId   String   @map("memoire_id")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  consultedAt DateTime @default(now()) @map("consulted_at")
+
+  memoire Memoire @relation(fields: [memoireId], references: [id], onDelete: Cascade)
+
+  @@map("consultations")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  action    String
+  details   String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+- Champ Vectoriel : `embedding Unsupported("vector(768)")?` dans la table `memoires`.
+
+---
+
+### Périmètre des Modules & Endpoints à Implémenter
+
+#### 1. Module Auth & RBAC (Transverse)
+- POST /api/auth/register : Inscription utilisateur (Rôle par défaut: PUBLIC ou ETUDIANT).
+- POST /api/auth/login : Authentification JWT + retour des infos de profil et rôle.
+- Middleware Auth & Guard RBAC : Vérification de la validité du token JWT et restriction selon le rôle.
+- GET /api/users (ADMIN uniquement) : Liste et gestion de l'activation des comptes.
+
+#### 2. Module A — Recherche Avancée & Recherche Hybride (IA)
+- GET /api/memoires/search : Recherche multicritère avec filtres (titre, université, domaine, année, typeDiplome) + Full-Text Search PostgreSQL (`tsvector`).
+- POST /api/memoires/search-semantic : Recherche sémantique IA :
+  1. Reçoit une requête texte en langage naturel (ex: "Travaux sur la reforestation dans le Sud").
+  2. Utilise le SDK Google Gen AI (`text-embedding-004`) pour générer le vecteur de la requête (768d).
+  3. Effectue une requête SQL brute `prisma.$queryRaw` pour chercher par similarité cosinus (`1 - (embedding <=> $1::vector)`).
+  4. Renvoie les 10 mémoires validés les plus proches avec leur score de similarité.
+- GET /api/memoires/:id/export-bibtex : Génération de fiches bibliographiques au format BibTeX / APA.
+
+#### 3. Module B — Cartographie Interactive (API pour Graph D3.js / React Flow)
+- GET /api/graph/data : Extrait en une requête optimisée la liste des nœuds (`nodes` : Universités, Domaines, Encadreurs, Auteurs) et des liens (`edges` : Co-encadrements, Appartenance) pour alimenter directement le composant de graphe interactif.
+
+#### 4. Module C — Workflow Dépôt, Pre-parsing & Modération
+- POST /api/memoires/submit :
+  1. Permet la soumission d'un mémoire (Upload du fichier PDF + Formulaire métadonnées).
+  2. Pre-parsing : Utilise `pdf-parse` pour extraire automatiquement le texte brut.
+  3. Envoie le résumé extrait à l'API Google Gen AI (`text-embedding-004`) pour calculer automatiquement l'embedding.
+  4. Sauvegarde le mémoire avec le statut `EN_ATTENTE_MODERATION` et insère le vecteur via `prisma.$executeRaw` dans la colonne `embedding`.
+- GET /api/moderation/pending (DOCUMENTALISTE / ADMIN) : Liste des mémoires en attente de modération.
+- PATCH /api/moderation/:id/status (DOCUMENTALISTE / ADMIN) : Validation ou Rejet d'un mémoire (avec enregistrement du `motifRejet`).
+
+#### 5. Module D — Dashboard Analytique & Statistiques
+- GET /api/analytics/kpis : Retourne les chiffres clés (Total mémoires, rejets, consultations).
+- GET /api/analytics/charts : Données agrégées pour graphiques (répartition par université, évolution par année de soutenance, thèmes dominants).
+
+---
+
+### Consignes de Code
+1. Fournis une architecture propre avec séparation claire des couches : Routes, Contrôleurs/Handlers, Services Métier, Middlewares.
+2. Intègre la gestion robuste des erreurs (try/catch, HTTP status codes appropriés).
+3. Inclut le fichier de configuration des variables d'environnement (`.env.example`) avec `DATABASE_URL`, `JWT_SECRET`, et `GEMINI_API_KEY`.
+4. Écris des commentaires clairs pour expliquer les requêtes SQL brutes associées à `pgvector`.

@@ -150,18 +150,21 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 * **Soumettre un mémoire (Protégé)**
   * **Méthode** : `POST`
   * **URL** : `http://localhost:3000/api/memoires/submit`
-  * **Auth** : Bearer Token (Coller le token copié)
-  * **Body** : Sélectionnez **Form-encoded** -> **Form-data** dans Thunder Client.
-    * `file` : * (Changez le type "Text" en "File" à droite du champ et uploadez un PDF) *
-    * `titre` : `Développement d'une API`
-    * `resume` : `Un super résumé...`
-    * `anneeSoutenance` : `2024`
-    * `typeDiplome` : `MASTER`
-    * `auteurNom` : `Doe`
-    * `auteurPrenom` : `Jane`
-    * `auteurEmail` : `jane@example.com`
-    * `universiteId` : `(UUID valide)`
-    * `domaineId` : `(UUID valide)`
+  * ⚠️ **Attention - Upload PDF** : Le plan gratuit de Thunder Client ne permet pas d'uploader des fichiers. Veuillez utiliser l'extension **Telegraph REST API Client** dans VS Code pour tester cet endpoint.
+  * **Configuration dans Telegraph** :
+    * **Auth** : Ajoutez manuellement un header `Authorization` avec la valeur `Bearer <VOTRE_TOKEN>` (ou utilisez le système d'authentification de Telegraph si configuré).
+    * **Body** : Allez dans l'onglet **Body**, choisissez **Form Data** (ou `multipart/form-data`).
+    * Ajoutez les champs (clés/valeurs) suivants :
+      * `file` : * (Changez le type "Text" en "File" et uploadez un PDF) *
+      * `titre` : `Développement d'une API`
+      * `resume` : `Un super résumé...`
+      * `anneeSoutenance` : `2024`
+      * `typeDiplome` : `MASTER`
+      * `auteurNom` : `Doe`
+      * `auteurPrenom` : `Jane`
+      * `auteurEmail` : `jane@example.com`
+      * `universiteId` : `(UUID valide)`
+      * `domaineId` : `(UUID valide)`
 
 ---
 

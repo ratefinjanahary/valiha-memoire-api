@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { Domaine, Encadreur, Universite, Memoire } from '@prisma/client';
 
 @Injectable()
 export class GraphService {
@@ -19,17 +20,17 @@ export class GraphService {
     const edges: any[] = [];
 
     // Ajouter les noeuds universités
-    universites.forEach((u: any) => {
+    universites.forEach((u: Universite) => {
       nodes.push({ id: `univ_${u.id}`, label: u.sigle || u.nom, type: 'universite' });
     });
 
     // Ajouter les noeuds domaines
-    domaines.forEach((d: any) => {
+    domaines.forEach((d: Domaine) => {
       nodes.push({ id: `dom_${d.id}`, label: d.nom, type: 'domaine' });
     });
 
     // Ajouter les noeuds encadreurs
-    encadreurs.forEach((e: any) => {
+    encadreurs.forEach((e: Encadreur) => {
       nodes.push({ id: `enc_${e.id}`, label: `${e.nom} ${e.prenom}`, type: 'encadreur' });
     });
 

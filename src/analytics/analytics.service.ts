@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { Universite } from '@prisma/client';
 
 @Injectable()
 export class AnalyticsService {
@@ -38,7 +39,7 @@ export class AnalyticsService {
 
     const universites = await this.prisma.universite.findMany();
     const parUniversite = parUniversiteRaw.map((item: any) => {
-      const univ = universites.find((u: any) => u.id === item.universiteId);
+      const univ = universites.find((u: Universite) => u.id === item.universiteId);
       return {
         label: univ?.sigle || univ?.nom || 'Inconnu',
         value: item._count.id
