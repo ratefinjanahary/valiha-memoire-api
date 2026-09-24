@@ -48,7 +48,7 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
       "role": "ADMIN" 
     }
     ```
-    *(Rôles possibles: PUBLIC, ETUDIANT, DOCUMENTALISTE, ADMIN)*
+    * (Rôles possibles: PUBLIC, ETUDIANT, DOCUMENTALISTE, ADMIN)*
 
 * **Connexion (Login)**
   * **Méthode** : `POST`
@@ -60,7 +60,7 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
       "password": "password123"
     }
     ```
-  * ⚠️ *N'oubliez pas de copier manuellement le token retourné pour la suite.*
+  * ⚠️ * N'oubliez pas de copier manuellement le token retourné pour la suite.*
 
 * **Mon Profil**
   * **Méthode** : `GET`
@@ -78,7 +78,50 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 ---
 
-### 4. 🎓 Mémoires - Recherche & Action (`/api/memoires`)
+### 4. 🏫 Universités (`/api/universites`)
+
+* **Lister les universités**
+  * **Méthode** : `GET`
+  * **URL** : `http://localhost:3000/api/universites`
+  * 💡 * Utile pour récupérer l'UUID d'une université avant de soumettre un mémoire.*
+
+* **Créer une université (Protégé)**
+  * **Méthode** : `POST`
+  * **URL** : `http://localhost:3000/api/universites`
+  * **Auth** : Bearer Token (Coller le token copié)
+  * **Body (JSON)** :
+    ```json
+    {
+      "nom": "Université d'Antananarivo",
+      "sigle": "UA",
+      "ville": "Antananarivo"
+    }
+    ```
+
+---
+
+### 5. 📁 Domaines (`/api/domaine`)
+
+* **Lister les domaines**
+  * **Méthode** : `GET`
+  * **URL** : `http://localhost:3000/api/domaine`
+  * 💡 * Utile pour récupérer l'UUID d'un domaine avant de soumettre un mémoire. *
+
+* **Créer un domaine (Protégé)**
+  * **Méthode** : `POST`
+  * **URL** : `http://localhost:3000/api/domaine`
+  * **Auth** : Bearer Token (Coller le token copié)
+  * **Body (JSON)** :
+    ```json
+    {
+      "nom": "Informatique",
+      "description": "Domaine de l'informatique et des sciences du numérique"
+    }
+    ```
+
+---
+
+### 6. 🎓 Mémoires - Recherche & Action (`/api/memoires`)
 
 * **Recherche classique**
   * **Méthode** : `GET`
@@ -109,7 +152,7 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
   * **URL** : `http://localhost:3000/api/memoires/submit`
   * **Auth** : Bearer Token (Coller le token copié)
   * **Body** : Sélectionnez **Form-encoded** -> **Form-data** dans Thunder Client.
-    * `file` : *(Changez le type "Text" en "File" à droite du champ et uploadez un PDF)*
+    * `file` : * (Changez le type "Text" en "File" à droite du champ et uploadez un PDF) *
     * `titre` : `Développement d'une API`
     * `resume` : `Un super résumé...`
     * `anneeSoutenance` : `2024`
@@ -122,9 +165,9 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 ---
 
-### 5. 🛡️ Modération (`/api/moderation`)
+### 7. 🛡️ Modération (`/api/moderation`)
 
-*(Ces endpoints nécessitent le rôle `DOCUMENTALISTE` ou `ADMIN`)*
+* (Ces endpoints nécessitent le rôle `DOCUMENTALISTE` ou `ADMIN`) *
 
 * **Lister les mémoires en attente**
   * **Méthode** : `GET`
@@ -141,12 +184,12 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
       "statut": "VALIDE" 
     }
     ```
-    *(Valeurs: BROUILLON, EN_ATTENTE_MODERATION, VALIDE, REJETTE)*
-    *Note: Si rejeté, ajoutez `"motifRejet": "Raison du rejet"`.*
+    * (Valeurs: BROUILLON, EN_ATTENTE_MODERATION, VALIDE, REJETTE) *
+    * Note: Si rejeté, ajoutez `"motifRejet": "Raison du rejet"`.*
 
 ---
 
-### 6. 📊 Analytics & Graphes
+### 8. 📊 Analytics & Graphes
 
 * **Graphe de relations**
   * **Méthode** : `GET`

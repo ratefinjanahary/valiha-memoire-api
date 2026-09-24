@@ -8,6 +8,8 @@ import { SearchModule } from './search/search.module.js';
 import { GraphModule } from './graph/graph.module.js';
 import { MemoireModule } from './memoire/memoire.module.js';
 import { AnalyticsModule } from './analytics/analytics.module.js';
+import { UniversiteModule } from './universite/universite.module.js';
+import { DomaineModule } from './domaine/domaine.module.js';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { AnalyticsModule } from './analytics/analytics.module.js';
     GraphModule,
     MemoireModule,
     AnalyticsModule,
+    UniversiteModule,
+    DomaineModule,
   ],
   controllers: [AppController],
   providers: [AppService],
