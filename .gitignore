@@ -48,6 +48,9 @@ web_modules/
 # uploads directory
 uploads/
 
+# Tests direcotories
+test/
+
 # TypeScript cache
 *.tsbuildinfo
 
