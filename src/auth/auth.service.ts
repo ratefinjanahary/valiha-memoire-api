@@ -5,12 +5,15 @@ import * as bcrypt from 'bcryptjs';
 import { Role } from './role.enum.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
+import { AuditService } from '../audit/audit.service.js';
+import { AuditAction } from '../common/audit.actions.js';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private readonly auditService: AuditService,
   ) {}
 
   async register(data: RegisterDto) {
@@ -23,7 +26,7 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
-    
+
     // Par défaut, l'utilisateur est PUBLIC ou ETUDIANT
     const roleToAssign = data.role === Role.ETUDIANT ? Role.ETUDIANT : Role.PUBLIC;
 
@@ -36,6 +39,9 @@ export class AuthService {
         role: roleToAssign,
       },
     });
+
+    // Audit : inscription
+    this.auditService.log(AuditAction.REGISTER, user.id, `email:${user.email}`);
 
     return this.generateToken(user);
   }
@@ -55,6 +61,9 @@ export class AuthService {
       throw new UnauthorizedException('Identifiants invalides');
     }
 
+    // Audit : connexion réussie
+    this.auditService.log(AuditAction.LOGIN, user.id, `email:${user.email}`);
+
     return this.generateToken(user);
   }
 
@@ -68,7 +77,7 @@ export class AuthService {
         nom: user.nom,
         prenom: user.prenom,
         role: user.role,
-      }
+      },
     };
   }
 
@@ -82,7 +91,7 @@ export class AuthService {
         role: true,
         isActif: true,
         createdAt: true,
-      }
+      },
     });
   }
 }

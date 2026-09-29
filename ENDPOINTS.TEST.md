@@ -49,6 +49,7 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
     }
     ```
     * (Rôles possibles: PUBLIC, ETUDIANT, DOCUMENTALISTE, ADMIN)*
+  * 📝 *Action auditée : `REGISTER`*
 
 * **Connexion (Login)**
   * **Méthode** : `POST`
@@ -61,6 +62,7 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
     }
     ```
   * ⚠️ * N'oubliez pas de copier manuellement le token retourné pour la suite.*
+  * 📝 *Action auditée : `LOGIN`*
 
 * **Mon Profil**
   * **Méthode** : `GET`
@@ -121,17 +123,41 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 ---
 
-### 6. 🎓 Mémoires - Recherche & Action (`/api/memoires`)
+### 6. 🎓 Mémoires - Recherche & Actions (`/api/memoires`)
 
-* **Recherche classique**
+#### ✅ Feat - Recherche par mot-clé `any|all` (PUBLIC)
+
+* **Recherche par mots-clés**
   * **Méthode** : `GET`
   * **URL** : `http://localhost:3000/api/memoires/search`
-  * **Query Parameters** (Onglet Query, Optionnels) :
-    * `q` : `informatique`
+  * **Auth** : Optionnel (Bearer Token pour un rôle étendu)
+  * **Query Parameters** (Optionnels) :
+    * `q` : `intelligence artificielle`
+    * `mode` : `any` *(ou `all` — défaut : `any`)*
     * `annee` : `2023`
-    * `typeDiplome` : `LICENCE` (ou `MASTER`, `DOCTORAT`)
+    * `typeDiplome` : `MASTER` *(LICENCE, MASTER, DOCTORAT)*
     * `universiteId` : `(UUID)`
     * `domaineId` : `(UUID)`
+    * `page` : `1`
+    * `limit` : `20` *(max 100)*
+  * **Exemples** :
+    * `GET /api/memoires/search?q=intelligence+artificielle&mode=any&limit=20`
+    * `GET /api/memoires/search?q=machine+learning&mode=all&annee=2023`
+  * 💡 *`mode=any` → contient AU MOINS UN des mots | `mode=all` → contient TOUS les mots*
+  * 🔐 *PUBLIC → VALIDE uniquement | ETUDIANT → VALIDE + ses propres | DOC/ADMIN → tout*
+  * 📝 *Action auditée : `SEARCH`*
+  * **Réponse** :
+    ```json
+    {
+      "data": [...],
+      "meta": {
+        "total": 42,
+        "page": 1,
+        "limit": 20,
+        "totalPages": 3
+      }
+    }
+    ```
 
 * **Recherche Sémantique (Vectorielle)**
   * **Méthode** : `POST`
@@ -165,6 +191,75 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
       * `auteurEmail` : `jane@example.com`
       * `universiteId` : `(UUID valide)`
       * `domaineId` : `(UUID valide)`
+  * 📝 *Action auditée : `SUBMIT_MEMOIRE`*
+
+---
+
+#### Feat — Recommandation Jaccard (PUBLIC)
+
+* **Mémoires similaires (Jaccard sur mots-clés)**
+  * **Méthode** : `GET`
+  * **URL** : `http://localhost:3000/api/memoires/:id/similaires`
+  * **Auth** : Aucune (endpoint public, retourne uniquement des VALIDE)
+  * **Query Parameters** (Optionnels) :
+    * `limit` : `5` *(max 20, défaut 5)*
+  * **Exemple** :
+    * `GET /api/memoires/550e8400-e29b-41d4-a716-446655440000/similaires?limit=10`
+  * 💡 *L'indice de Jaccard est calculé sur les mots-clés communs : `|A ∩ B| / |A ∪ B|`*
+  * **Réponse** :
+    ```json
+    [
+      {
+        "id": "...",
+        "titre": "Titre du mémoire similaire",
+        "jaccardScore": 0.666,
+        "motsCles": [...],
+        ...
+      }
+    ]
+    ```
+
+---
+
+#### Feat — Popularité & Top (PUBLIC)
+
+* **Popularité d'un mémoire**
+  * **Méthode** : `GET`
+  * **URL** : `http://localhost:3000/api/memoires/:id/popularite`
+  * **Auth** : Aucune (endpoint public, fonctionne uniquement sur les VALIDE)
+  * **Exemple** :
+    * `GET /api/memoires/550e8400-e29b-41d4-a716-446655440000/popularite`
+  * **Réponse** :
+    ```json
+    {
+      "memoireId": "550e8400-...",
+      "titre": "Développement d'une API REST",
+      "auteur": "Jane Doe",
+      "nbConsultations": 127
+    }
+    ```
+
+* **Top des mémoires les plus consultés**
+  * **Méthode** : `GET`
+  * **URL** : `http://localhost:3000/api/memoires/top`
+  * **Auth** : Aucune (endpoint public, retourne uniquement des VALIDE)
+  * **Query Parameters** (Optionnels) :
+    * `limit` : `10` *(max 100, défaut 10)*
+  * **Exemple** :
+    * `GET /api/memoires/top?limit=5`
+  * **Réponse** :
+    ```json
+    [
+      {
+        "rang": 1,
+        "id": "...",
+        "titre": "...",
+        "nbConsultations": 342,
+        "universite": { "nom": "...", "sigle": "..." },
+        ...
+      }
+    ]
+    ```
 
 ---
 
@@ -189,10 +284,35 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
     ```
     * (Valeurs: BROUILLON, EN_ATTENTE_MODERATION, VALIDE, REJETTE) *
     * Note: Si rejeté, ajoutez `"motifRejet": "Raison du rejet"`.*
+  * 📝 *Action auditée : `VALIDATE_MEMOIRE` ou `REJECT_MEMOIRE`*
 
 ---
 
-### 8. 📊 Analytics & Graphes
+### 8. 🔑 Mots-clés (`/api/mot-cles`)
+
+#### Feat — Trending mots-clés (cache TTL 5 min)
+
+* **Mots-clés tendance**
+  * **Méthode** : `GET`
+  * **URL** : `http://localhost:3000/api/mot-cles/trending`
+  * **Auth** : Aucune (endpoint public)
+  * **Query Parameters** (Optionnels) :
+    * `limit` : `10` *(max 50, défaut 10)*
+  * **Exemple** :
+    * `GET /api/mot-cles/trending?limit=20`
+  * 💡 *Résultats mis en cache pendant **5 minutes** pour éviter des requêtes répétées sur la BDD.*
+  * **Réponse** :
+    ```json
+    [
+      { "motCleId": "...", "libelle": "intelligence artificielle", "count": 24 },
+      { "motCleId": "...", "libelle": "machine learning", "count": 18 },
+      { "motCleId": "...", "libelle": "réseau de neurones", "count": 12 }
+    ]
+    ```
+
+---
+
+### 9. 📊 Analytics & Graphes
 
 * **Graphe de relations**
   * **Méthode** : `GET`
@@ -205,3 +325,29 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 * **Récupérer les données de graphiques (Charts)**
   * **Méthode** : `GET`
   * **URL** : `http://localhost:3000/api/analytics/charts`
+
+---
+
+## 🗺️ Récapitulatif des nouvelles features
+
+| Feature | Endpoint | Méthode | Rôle min. | Cache |
+|---------|----------|---------|-----------|-------|
+| **1** Recherche any\|all | `/api/memoires/search` | GET | PUBLIC | — |
+| **2** Trending mots-clés | `/api/mot-cles/trending` | GET | PUBLIC | ✅ 5 min |
+| **4** Jaccard similaires | `/api/memoires/:id/similaires` | GET | PUBLIC | — |
+| **5** Audit (interne) | — | — | — | — |
+| **7** Popularité mémoire | `/api/memoires/:id/popularite` | GET | PUBLIC | — |
+| **7** Top consultés | `/api/memoires/top` | GET | PUBLIC | — |
+
+## 🔒 Actions auditées automatiquement
+
+Chaque action critique est enregistrée dans la table `audit_logs` :
+
+| Action | Déclencheur |
+|--------|-------------|
+| `REGISTER` | `POST /api/auth/register` |
+| `LOGIN` | `POST /api/auth/login` |
+| `SUBMIT_MEMOIRE` | `POST /api/memoires/submit` |
+| `VALIDATE_MEMOIRE` | `PATCH /api/moderation/:id/status` → VALIDE |
+| `REJECT_MEMOIRE` | `PATCH /api/moderation/:id/status` → REJETTE |
+| `SEARCH` | `GET /api/memoires/search` |

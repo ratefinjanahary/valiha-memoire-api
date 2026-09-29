@@ -1,5 +1,5 @@
 
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { GoogleAiService } from '../search/google-ai.service.js';
 import 'multer';
@@ -10,6 +10,12 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
 import { SubmitMemoireDto } from './dto/submit-memoire.dto.js';
+import { SearchMemoireDto } from './dto/search.memoire.dto.js';
+import { SimilaireQueryDto } from './dto/similaire.query.dto.js';
+import { PopulariteQueryDto } from './dto/popularite.query.dto.js';
+import { AuditService } from '../audit/audit.service.js';
+import { AuditAction } from '../common/audit.actions.js';
+import { jaccardSimilarity } from '../common/jaccard.util.js';
 
 @Injectable()
 export class MemoireService {
@@ -19,25 +25,22 @@ export class MemoireService {
     private prisma: PrismaService,
     private aiService: GoogleAiService,
     @Inject(FILE_STORAGE_SERVICE) private fileStorage: IFileStorage,
+    private readonly auditService: AuditService,
   ) {}
 
   async submitMemoire(data: SubmitMemoireDto, file: Express.Multer.File, userId: string) {
-    // 1. Sauvegarder le fichier PDF
     const pdfUrl = await this.fileStorage.uploadFile(file, 'memoires');
 
-    // 2. Extraire le texte du PDF
     let resume = data.resume || '';
     if (!resume) {
       try {
         const pdfData = await pdfParse(file.buffer);
-        // On prend les 1000 premiers caractères comme résumé si non fourni
         resume = pdfData.text.substring(0, 1000) + '...';
       } catch (error) {
         this.logger.error('Failed to parse PDF', error);
       }
     }
 
-    // 3. Créer le mémoire dans la BDD
     const memoire = await this.prisma.memoire.create({
       data: {
         titre: data.titre,
@@ -56,11 +59,9 @@ export class MemoireService {
       },
     });
 
-    // 4. Calculer l'embedding de manière asynchrone (ou synchrone)
     try {
       const textToEmbed = `${data.titre}. ${resume}`;
       const embedding = await this.aiService.generateEmbedding(textToEmbed);
-      
       if (embedding && embedding.length > 0) {
         const embeddingString = `[${embedding.join(',')}]`;
         await this.prisma.$executeRawUnsafe(`
@@ -70,6 +71,9 @@ export class MemoireService {
     } catch (e) {
       this.logger.error(`Error generating embedding for memoire ${memoire.id}`, e);
     }
+
+    // Audit : soumission de mémoire
+    this.auditService.log(AuditAction.SUBMIT_MEMOIRE, userId, `memoireId:${memoire.id}`);
 
     return memoire;
   }
@@ -85,13 +89,265 @@ export class MemoireService {
     });
   }
 
-  async updateStatus(id: string, statut: StatutMemoire, motifRejet?: string) {
-    return this.prisma.memoire.update({
+  /* EXISTANT : updateStatus — branché sur l'audit */
+  async updateStatus(id: string, statut: StatutMemoire, motifRejet?: string, moderateurId?: string) {
+    const updated = await this.prisma.memoire.update({
       where: { id },
       data: {
         statut,
         motifRejet: statut === StatutMemoire.REJETTE ? motifRejet : null,
       },
     });
+
+    const action =
+      statut === StatutMemoire.VALIDE
+        ? AuditAction.VALIDATE_MEMOIRE
+        : statut === StatutMemoire.REJETTE
+          ? AuditAction.REJECT_MEMOIRE
+          : undefined;
+
+    if (action) {
+      this.auditService.log(action, moderateurId, `memoireId:${id}`);
+    }
+
+    return updated;
+  }
+
+  /* Feat 1 : Recherche par mot-clé any|all */
+  async searchByKeyword(dto: SearchMemoireDto, user?: { id: string; role: string }) {
+    const { q, mode, annee, typeDiplome, universiteId, domaineId, page, limit } = dto;
+
+    const safeLimit = Math.min(limit, 100);
+    const skip = (page - 1) * safeLimit;
+
+    // Construire la contrainte de statut selon le rôle
+    const statutFilter = buildStatutFilter(user);
+
+    const baseWhere: Record<string, unknown> = { ...statutFilter };
+
+    if (annee) baseWhere.anneeSoutenance = annee;
+    if (typeDiplome) baseWhere.typeDiplome = typeDiplome;
+    if (universiteId) baseWhere.universiteId = universiteId;
+    if (domaineId) baseWhere.domaineId = domaineId;
+
+    // Construire le filtre textuel selon mode
+    if (q && q.trim()) {
+      const mots = q.trim().split(/\s+/).filter((m) => m.length > 0);
+
+      const buildWordConditions = (mot: string) => [
+        { titre: { contains: mot, mode: 'insensitive' as const } },
+        { resume: { contains: mot, mode: 'insensitive' as const } },
+        { auteurNom: { contains: mot, mode: 'insensitive' as const } },
+        { auteurPrenom: { contains: mot, mode: 'insensitive' as const } },
+        {
+          motsCles: {
+            some: {
+              motCle: { libelle: { contains: mot, mode: 'insensitive' as const } },
+            },
+          },
+        },
+      ];
+
+      if (mode === 'any') {
+        // Au moins un mot matche dans au moins un champ
+        const orClauses = mots.flatMap(buildWordConditions);
+        baseWhere.OR = orClauses;
+      } else {
+        // mode === 'all' : chaque mot doit matcher quelque part
+        baseWhere.AND = mots.map((mot) => ({ OR: buildWordConditions(mot) }));
+      }
+    }
+
+    const [total, data] = await Promise.all([
+      this.prisma.memoire.count({ where: baseWhere as any }),
+      this.prisma.memoire.findMany({
+        where: baseWhere as any,
+        include: {
+          universite: { select: { nom: true, sigle: true } },
+          domaine: { select: { nom: true } },
+          motsCles: { include: { motCle: { select: { libelle: true } } } },
+        },
+        orderBy: { anneeSoutenance: 'desc' },
+        skip,
+        take: safeLimit,
+      }),
+    ]);
+
+    // Audit : action SEARCH
+    this.auditService.log(AuditAction.SEARCH, user?.id, `q="${q ?? ''}" mode=${mode}`);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
+      },
+    };
+  }
+
+  async getSimilaires(id: string, dto: SimilaireQueryDto) {
+    const safeLimit = Math.min(dto.limit, 20);
+
+    // Vérifier que le mémoire cible existe et est VALIDE
+    const target = await this.prisma.memoire.findUnique({
+      where: { id, statut: StatutMemoire.VALIDE },
+      select: { id: true },
+    });
+
+    if (!target) {
+      throw new NotFoundException(`Mémoire ${id} introuvable ou non validé`);
+    }
+
+    // Récupérer les mots-clés de TOUS les mémoires VALIDE via $queryRaw (tagged template)
+    const rows = await this.prisma.$queryRaw<Array<{ memoire_id: string; mot_cle_id: string }>>`
+      SELECT mmc.memoire_id, mmc.mot_cle_id
+      FROM memoire_mots_cles mmc
+      INNER JOIN memoires m ON m.id = mmc.memoire_id
+      WHERE m.statut = 'VALIDE'
+    `;
+
+    if (rows.length === 0) return [];
+
+    // Construire la map memoireId → Set<motCleId>
+    const motClesParMemoire = new Map<string, Set<string>>();
+    for (const row of rows) {
+      if (!motClesParMemoire.has(row.memoire_id)) {
+        motClesParMemoire.set(row.memoire_id, new Set());
+      }
+      motClesParMemoire.get(row.memoire_id)!.add(row.mot_cle_id);
+    }
+
+    const setTarget = motClesParMemoire.get(id) ?? new Set<string>();
+
+    if (setTarget.size === 0) return [];
+
+    /* Calculer Jaccard pour chaque autre mémoire VALIDE */
+    const scores: Array<{ memoireId: string; score: number }> = [];
+    for (const [memoireId, setB] of motClesParMemoire.entries()) {
+      if (memoireId === id) continue;
+      const score = jaccardSimilarity(setTarget, setB);
+      if (score > 0) scores.push({ memoireId, score });
+    }
+
+    // Trier par score décroissant, prendre les N premiers
+    scores.sort((a, b) => b.score - a.score);
+    const topIds = scores.slice(0, safeLimit).map((s) => s.memoireId);
+
+    if (topIds.length === 0) return [];
+
+    // Récupérer les détails des mémoires similaires
+    const memoires = await this.prisma.memoire.findMany({
+      where: { id: { in: topIds } },
+      include: {
+        universite: { select: { nom: true, sigle: true } },
+        domaine: { select: { nom: true } },
+        motsCles: { include: { motCle: { select: { libelle: true } } } },
+      },
+    });
+
+    // Ré-attacher le score Jaccard et retourner dans l'ordre
+    const scoreMap = new Map(scores.map((s) => [s.memoireId, s.score]));
+    return memoires
+      .map((m) => ({ ...m, jaccardScore: scoreMap.get(m.id) ?? 0 }))
+      .sort((a, b) => b.jaccardScore - a.jaccardScore);
+  }
+
+  /* Feat 7 : Statistiques de popularité par mémoire */
+  async getPopulariteMemoire(id: string) {
+    const memoire = await this.prisma.memoire.findUnique({
+      where: { id, statut: StatutMemoire.VALIDE },
+      select: { id: true, titre: true, auteurNom: true, auteurPrenom: true },
+    });
+
+    if (!memoire) {
+      throw new NotFoundException(`Mémoire ${id} introuvable ou non validé`);
+    }
+
+    const count = await this.prisma.consultation.count({
+      where: { memoireId: id },
+    });
+
+    return {
+      memoireId: id,
+      titre: memoire.titre,
+      auteur: `${memoire.auteurPrenom} ${memoire.auteurNom}`,
+      nbConsultations: count,
+    };
+  }
+
+  /* Feat 7 : Top global des mémoires les plus consultés */
+  async getTopMemoires(dto: PopulariteQueryDto) {
+    const safeLimit = Math.min(dto.limit, 100);
+
+    /* groupBy sur consultations pour obtenir les counts */
+    const grouped = await this.prisma.consultation.groupBy({
+      by: ['memoireId'],
+      _count: { memoireId: true },
+      orderBy: { _count: { memoireId: 'desc' } },
+      take: safeLimit,
+    });
+
+    if (grouped.length === 0) return [];
+
+    const memoireIds = grouped.map((g) => g.memoireId);
+
+    /* Récupérer les détails, uniquement VALIDE */
+    const memoires = await this.prisma.memoire.findMany({
+      where: { id: { in: memoireIds }, statut: StatutMemoire.VALIDE },
+      select: {
+        id: true,
+        titre: true,
+        auteurNom: true,
+        auteurPrenom: true,
+        anneeSoutenance: true,
+        typeDiplome: true,
+        universite: { select: { nom: true, sigle: true } },
+        domaine: { select: { nom: true } },
+      },
+    });
+
+    /* Construire un map id → détails */
+    const memoireMap = new Map(memoires.map((m) => [m.id, m]));
+
+    /* Combiner avec les counts et retourner dans l'ordre */
+    return grouped
+      .filter((g) => memoireMap.has(g.memoireId))
+      .map((g, index) => ({
+        rang: index + 1,
+        ...memoireMap.get(g.memoireId)!,
+        nbConsultations: g._count.memoireId,
+      }));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Helpers internes
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Construit la contrainte de statut selon le rôle de l'utilisateur.
+ *
+ * - PUBLIC / non authentifié → uniquement VALIDE
+ * - ETUDIANT → VALIDE + ses propres mémoires (OR)
+ * - DOCUMENTALISTE / ADMIN → aucune restriction
+ */
+function buildStatutFilter(user?: { id: string; role: string }) {
+  if (!user) return { statut: StatutMemoire.VALIDE };
+
+  switch (user.role) {
+    case 'ETUDIANT':
+      return {
+        OR: [
+          { statut: StatutMemoire.VALIDE },
+          { soumisParId: user.id },
+        ],
+      };
+    case 'DOCUMENTALISTE':
+    case 'ADMIN':
+      return {}; // Aucun filtre de statut
+    default:
+      return { statut: StatutMemoire.VALIDE };
   }
 }
