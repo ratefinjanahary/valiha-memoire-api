@@ -10,7 +10,7 @@ export interface TrendingItem {
 }
 
 const CACHE_KEY_PREFIX = 'trending:limit:';
-/** TTL par défaut : 5 minutes */
+/* TTL par défaut : 5 minutes */
 const DEFAULT_TTL_SECONDS = 300;
 
 @Injectable()

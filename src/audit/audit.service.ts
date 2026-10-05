@@ -24,4 +24,33 @@ export class AuditService {
       this.logger.error(`AuditLog failed [${action}]`, err),
     );
   }
+
+  async findAll(page: number = 1) {
+    const limit = 10;
+    const skip = (page - 1) * limit;
+
+    const [total, data] = await Promise.all([
+      this.prisma.auditLog.count(),
+      this.prisma.auditLog.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          user: {
+            select: { nom: true, prenom: true, email: true, role: true },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
 }
