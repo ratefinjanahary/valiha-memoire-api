@@ -16,10 +16,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import 'multer';
 import { MemoireService } from './memoire.service.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { OptionalJwtGuard } from '../auth/guards/optional-jwt.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { Role } from '../auth/role.enum.js';
-import { StatutMemoire } from '@prisma/client';
 import { SubmitMemoireDto } from './dto/submit-memoire.dto.js';
 import { UpdateStatusDto } from './dto/update-status.dto.js';
 import { SearchMemoireDto } from './dto/search.memoire.dto.js';
@@ -30,9 +30,7 @@ import { PopulariteQueryDto } from './dto/popularite.query.dto.js';
 export class MemoireController {
   constructor(private readonly memoireService: MemoireService) {}
 
-  // ─────────────────────────────────────────────────────────────
-  // EXISTANT : Soumettre un mémoire
-  // ─────────────────────────────────────────────────────────────
+  /* Soumettre un mémoire existant */
   @UseGuards(JwtAuthGuard)
   @Post('memoires/submit')
   @UseInterceptors(FileInterceptor('file'))
@@ -47,19 +45,16 @@ export class MemoireController {
     return this.memoireService.submitMemoire(body, file, req.user.id);
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // EXISTANT : Mémoires en attente de modération
-  // ─────────────────────────────────────────────────────────────
+  /* Mémoires en attente de modération existant */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.DOCUMENTALISTE, Role.ADMIN)
   @Get('moderation/pending')
-  async getPending() {
-    return this.memoireService.getPendingMemoires();
+  async getPending(@Query('page') page?: string) {
+    const pageNumber = page ? parseInt(page, 10) : 1;
+    return this.memoireService.getPendingMemoires(pageNumber > 0 ? pageNumber : 1);
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // EXISTANT : Mettre à jour le statut
-  // ─────────────────────────────────────────────────────────────
+  /* Mettre à jour le statut existant */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.DOCUMENTALISTE, Role.ADMIN)
   @Patch('moderation/:id/status')
@@ -71,13 +66,8 @@ export class MemoireController {
     return this.memoireService.updateStatus(id, body.statut, body.motifRejet, req.user.id);
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // FEATURE 1 : Recherche par mot-clé any|all
-  // Route statique — DOIT être AVANT /:id/...
-  // ─────────────────────────────────────────────────────────────
-  /**
-   * GET /api/memoires/search
-   *
+  /* Recherche par mot-clé any|all existant */
+  /* GET /api/memoires/search
    * Recherche les mémoires par mots-clés.
    * - `mode=any` (défaut) : au moins un mot matche
    * - `mode=all` : tous les mots doivent matcher
@@ -86,6 +76,7 @@ export class MemoireController {
    * Rôle ETUDIANT → VALIDE + ses propres mémoires
    * Rôle DOC/ADMIN → tout
    */
+  @UseGuards(OptionalJwtGuard)
   @Get('memoires/search')
   async searchByKeyword(
     @Query() query: SearchMemoireDto,
@@ -95,16 +86,10 @@ export class MemoireController {
     return this.memoireService.searchByKeyword(query, req.user);
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // FEATURE 7 : Top global des mémoires les plus consultés
-  // Route statique — DOIT être AVANT /:id/...
-  // ─────────────────────────────────────────────────────────────
-  /**
-   * GET /api/memoires/top
-   *
+  /* FEATURE 7 : Top global des mémoires les plus consultés */
+  /* GET /api/memoires/top
    * Classement global des mémoires VALIDE par nombre de consultations.
    * Accessible sans authentification.
-   *
    * @query limit - Nombre de résultats (1-100, défaut 10)
    */
   @Get('memoires/top')
@@ -112,15 +97,10 @@ export class MemoireController {
     return this.memoireService.getTopMemoires(query);
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // FEATURE 4 : Recommandation Jaccard
-  // ─────────────────────────────────────────────────────────────
-  /**
-   * GET /api/memoires/:id/similaires
-   *
+  /* Recommandation Jaccard existant */
+  /* GET /api/memoires/:id/similaires
    * Retourne les mémoires VALIDE les plus similaires via l'indice de Jaccard
    * calculé sur les mots-clés communs. Accessible sans authentification.
-   *
    * @param id - UUID du mémoire cible
    * @query limit - Nombre de suggestions (1-20, défaut 5)
    */
@@ -132,17 +112,27 @@ export class MemoireController {
     return this.memoireService.getSimilaires(id, query);
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // FEATURE 7 : Popularité d'un mémoire spécifique
-  // ─────────────────────────────────────────────────────────────
-  /**
-   * GET /api/memoires/:id/popularite
-   *
+  /* Popularité d'un mémoire spécifique existant */
+  /* GET /api/memoires/:id/popularite
    * Retourne le nombre total de consultations d'un mémoire VALIDE.
    * Accessible sans authentification.
    */
   @Get('memoires/:id/popularite')
   async getPopularite(@Param('id', ParseUUIDPipe) id: string) {
     return this.memoireService.getPopulariteMemoire(id);
+  }
+
+  /* GET /api/memoires/:id
+   * Récupère un mémoire par son ID et enregistre une consultation.
+   * Accessible sans authentification (ou selon les règles d'accès public).
+   */
+  @Get('memoires/:id')
+  async getMemoire(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+  ) {
+    const ip = req.ip || req.headers['x-forwarded-for'] || '';
+    const userAgent = req.headers['user-agent'] || '';
+    return this.memoireService.getMemoireWithConsultation(id, ip, userAgent);
   }
 }

@@ -29,7 +29,7 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 ### 1. 🟢 Général / Santé
 * **Vérification de l'API**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/`
+  * **URL** :     `http://localhost:3000/`
 
 ---
 
@@ -37,7 +37,7 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 * **Inscription (Register)**
   * **Méthode** : `POST`
-  * **URL** : `http://localhost:3000/api/auth/register`
+  * **URL** :     `http://localhost:3000/api/auth/register`
   * **Body (JSON)** :
     ```json
     {
@@ -53,7 +53,7 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 * **Connexion (Login)**
   * **Méthode** : `POST`
-  * **URL** : `http://localhost:3000/api/auth/login`
+  * **URL** :     `http://localhost:3000/api/auth/login`
   * **Body (JSON)** :
     ```json
     {
@@ -66,7 +66,7 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 * **Mon Profil**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/api/auth/profile`
+  * **URL** :     `http://localhost:3000/api/auth/profile`
   * **Auth** : Bearer Token (Coller le token copié)
 
 ---
@@ -75,7 +75,7 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 * **Lister tous les utilisateurs (Admin uniquement)**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/api/users`
+  * **URL** :     `http://localhost:3000/api/users`
   * **Auth** : Bearer Token (Coller le token copié)
 
 ---
@@ -84,12 +84,12 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 * **Lister les universités**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/api/universites`
+  * **URL** :     `http://localhost:3000/api/universites`
   * 💡 * Utile pour récupérer l'UUID d'une université avant de soumettre un mémoire.*
 
 * **Créer une université (Protégé)**
   * **Méthode** : `POST`
-  * **URL** : `http://localhost:3000/api/universites`
+  * **URL** :     `http://localhost:3000/api/universites`
   * **Auth** : Bearer Token (Coller le token copié)
   * **Body (JSON)** :
     ```json
@@ -106,12 +106,12 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 * **Lister les domaines**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/api/domaine`
+  * **URL** :     `http://localhost:3000/api/domaine`
   * 💡 * Utile pour récupérer l'UUID d'un domaine avant de soumettre un mémoire. *
 
 * **Créer un domaine (Protégé)**
   * **Méthode** : `POST`
-  * **URL** : `http://localhost:3000/api/domaine`
+  * **URL** :     `http://localhost:3000/api/domaine`
   * **Auth** : Bearer Token (Coller le token copié)
   * **Body (JSON)** :
     ```json
@@ -138,10 +138,9 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
     * `typeDiplome` : `MASTER` *(LICENCE, MASTER, DOCTORAT)*
     * `universiteId` : `(UUID)`
     * `domaineId` : `(UUID)`
-    * `page` : `1`
-    * `limit` : `20` *(max 100)*
+    * `page` : `1` *(Défaut 1, fixé à 10 résultats par page)*
   * **Exemples** :
-    * `GET /api/memoires/search?q=intelligence+artificielle&mode=any&limit=20`
+    * `GET /api/memoires/search?q=intelligence+artificielle&mode=any&page=2`
     * `GET /api/memoires/search?q=machine+learning&mode=all&annee=2023`
   * 💡 *`mode=any` → contient AU MOINS UN des mots | `mode=all` → contient TOUS les mots*
   * 🔐 *PUBLIC → VALIDE uniquement | ETUDIANT → VALIDE + ses propres | DOC/ADMIN → tout*
@@ -153,8 +152,8 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
       "meta": {
         "total": 42,
         "page": 1,
-        "limit": 20,
-        "totalPages": 3
+        "limit": 10,
+        "totalPages": 5
       }
     }
     ```
@@ -199,8 +198,8 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 * **Mémoires similaires (Jaccard sur mots-clés)**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/api/memoires/:id/similaires`
-  * **Auth** : Aucune (endpoint public, retourne uniquement des VALIDE)
+  * **URL** :     `http://localhost:3000/api/memoires/:id/similaires`
+  * **Auth** :     Aucune (endpoint public, retourne uniquement des VALIDE)
   * **Query Parameters** (Optionnels) :
     * `limit` : `5` *(max 20, défaut 5)*
   * **Exemple** :
@@ -225,8 +224,8 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 * **Popularité d'un mémoire**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/api/memoires/:id/popularite`
-  * **Auth** : Aucune (endpoint public, fonctionne uniquement sur les VALIDE)
+  * **URL** :     `http://localhost:3000/api/memoires/:id/popularite`
+  * **Auth** :    Aucune (endpoint public, fonctionne uniquement sur les VALIDE)
   * **Exemple** :
     * `GET /api/memoires/550e8400-e29b-41d4-a716-446655440000/popularite`
   * **Réponse** :
@@ -241,12 +240,12 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 * **Top des mémoires les plus consultés**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/api/memoires/top`
+  * **URL** :     `http://localhost:3000/api/memoires/top`
   * **Auth** : Aucune (endpoint public, retourne uniquement des VALIDE)
   * **Query Parameters** (Optionnels) :
     * `limit` : `10` *(max 100, défaut 10)*
   * **Exemple** :
-    * `GET /api/memoires/top?limit=5`
+    *  `GET /api/memoires/top?limit=5`
   * **Réponse** :
     ```json
     [
@@ -269,12 +268,14 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 * **Lister les mémoires en attente**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/api/moderation/pending`
+  * **URL** :     `http://localhost:3000/api/moderation/pending`
   * **Auth** : Bearer Token (Coller le token copié)
+  * **Query Parameters** (Optionnels) :
+    * `page` : `1` *(Défaut 1, fixé à 10 résultats par page)*
 
 * **Mettre à jour le statut d'un mémoire**
   * **Méthode** : `PATCH`
-  * **URL** : `http://localhost:3000/api/moderation/:id/status` (Remplacez `:id` dans l'URL)
+  * **URL** :     `http://localhost:3000/api/moderation/:id/status` (Remplacez `:id` dans l'URL)
   * **Auth** : Bearer Token (Coller le token copié)
   * **Body (JSON)** :
     ```json
@@ -294,12 +295,12 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 * **Mots-clés tendance**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/api/mot-cles/trending`
-  * **Auth** : Aucune (endpoint public)
+  * **URL** :     `http://localhost:3000/api/mot-cles/trending`
+  * **Auth** :     Aucune (endpoint public)
   * **Query Parameters** (Optionnels) :
-    * `limit` : `10` *(max 50, défaut 10)*
+    *             `limit` : `10` *(max 50, défaut 10)*
   * **Exemple** :
-    * `GET /api/mot-cles/trending?limit=20`
+    *             `GET /api/mot-cles/trending?limit=20`
   * 💡 *Résultats mis en cache pendant **5 minutes** pour éviter des requêtes répétées sur la BDD.*
   * **Réponse** :
     ```json
@@ -316,38 +317,55 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 * **Graphe de relations**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/api/graph/data`
+  * **URL** :     `http://localhost:3000/api/graph/data`
 
 * **Récupérer les KPIs**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/api/analytics/kpis`
+  * **URL** :     `http://localhost:3000/api/analytics/kpis`
 
 * **Récupérer les données de graphiques (Charts)**
   * **Méthode** : `GET`
-  * **URL** : `http://localhost:3000/api/analytics/charts`
+  * **URL** :     `http://localhost:3000/api/analytics/charts`
+
+---
+
+### 10. 📜 Audit (`/api/audit`)
+
+* **Lister les logs d'audit (Admin uniquement)**
+  * **Méthode** : `GET`
+  * **URL** :     `http://localhost:3000/api/audit`
+  * **Auth** : Bearer Token (Coller le token copié, rôle ADMIN)
+  * **Query Parameters** (Optionnels) :
+    * `page` : `1` *(Défaut 1)*
+  * **Exemple** :
+    * `GET /api/audit?page=1`
 
 ---
 
 ## 🗺️ Récapitulatif des nouvelles features
 
-| Feature | Endpoint | Méthode | Rôle min. | Cache |
-|---------|----------|---------|-----------|-------|
-| **1** Recherche any\|all | `/api/memoires/search` | GET | PUBLIC | — |
-| **2** Trending mots-clés | `/api/mot-cles/trending` | GET | PUBLIC | ✅ 5 min |
-| **4** Jaccard similaires | `/api/memoires/:id/similaires` | GET | PUBLIC | — |
-| **5** Audit (interne) | — | — | — | — |
-| **7** Popularité mémoire | `/api/memoires/:id/popularite` | GET | PUBLIC | — |
-| **7** Top consultés | `/api/memoires/top` | GET | PUBLIC | — |
+| Feature                  | Endpoint                       | Méthode | Rôle min. | Cache |
+|--------------------------|--------------------------------|---------|-----------|-------|
+| **1** Recherche any\|all | `/api/memoires/search`         | GET     | PUBLIC    | —     |
+| **2** Trending mots-clés | `/api/mot-cles/trending`       | GET     | PUBLIC    | ✅ 5 min |
+| **4** Jaccard similaires | `/api/memoires/:id/similaires` | GET     | PUBLIC    | —     |
+| **5** Liste des audits   | `/api/audit`                   | GET     | ADMIN     | —     |
+| **7** Popularité mémoire | `/api/memoires/:id/popularite` | GET     | PUBLIC    | —     |
+| **7** Top consultés      | `/api/memoires/top`            | GET     | PUBLIC    | —     |
 
 ## 🔒 Actions auditées automatiquement
 
 Chaque action critique est enregistrée dans la table `audit_logs` :
 
-| Action | Déclencheur |
-|--------|-------------|
-| `REGISTER` | `POST /api/auth/register` |
-| `LOGIN` | `POST /api/auth/login` |
-| `SUBMIT_MEMOIRE` | `POST /api/memoires/submit` |
-| `VALIDATE_MEMOIRE` | `PATCH /api/moderation/:id/status` → VALIDE |
-| `REJECT_MEMOIRE` | `PATCH /api/moderation/:id/status` → REJETTE |
-| `SEARCH` | `GET /api/memoires/search` |
+| Action             | Déclencheur                     |
+|--------------------|---------------------------------|
+| `REGISTER`         | `POST /api/auth/register`       |
+| `LOGIN`            | `POST /api/auth/login`          |
+| `SUBMIT_MEMOIRE`   | `POST /api/memoires/submit`     |
+| `VALIDATE_MEMOIRE` | `PATCH /api/moderation/:id/status` → VALIDE  |
+| `REJECT_MEMOIRE`   | `PATCH /api/moderation/:id/status` → REJETTE |
+| `SEARCH`           | `GET /api/memoires/search`            |
+| `SEARCH_SEMANTIC`  | `POST /api/memoires/search-semantic`  |
+| `SIMILAIRES`       | `GET /api/memoires/:id/similaires`    |
+| `POPULARITE`       | `GET /api/memoires/:id/popularite`    |
+| `SEARCH_SEMANTIC`  | `POST /api/memoires/search-semantic`  |

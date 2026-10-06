@@ -64,4 +64,38 @@ export class AnalyticsService {
       evolutionAnnee: evolutionAnnee
     };
   }
+
+  async getConsultationsStats(query: { annee?: number; mois?: number }) {
+    const { annee, mois } = query;
+    const where: any = {};
+
+    if (annee || mois) {
+      const year = annee || new Date().getFullYear();
+      let startDate: Date;
+      let endDate: Date;
+
+      if (mois) {
+        // Filtrer sur un mois précis d'une année donnée (les mois sont de 0 à 11 en JS)
+        startDate = new Date(year, mois - 1, 1, 0, 0, 0, 0);
+        endDate = new Date(year, mois, 0, 23, 59, 59, 999);
+      } else {
+        // Filtrer sur toute l'année
+        startDate = new Date(year, 0, 1, 0, 0, 0, 0);
+        endDate = new Date(year, 11, 31, 23, 59, 59, 999);
+      }
+
+      where.consultedAt = {
+        gte: startDate,
+        lte: endDate,
+      };
+    }
+
+    const count = await this.prisma.consultation.count({ where });
+
+    return {
+      annee: annee || null,
+      mois: mois || null,
+      totalConsultations: count,
+    };
+  }
 }

@@ -1,5 +1,5 @@
 
-import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { GoogleAiService } from '../search/google-ai.service.js';
 import 'multer';
@@ -72,24 +72,41 @@ export class MemoireService {
       this.logger.error(`Error generating embedding for memoire ${memoire.id}`, e);
     }
 
-    // Audit : soumission de mémoire
     this.auditService.log(AuditAction.SUBMIT_MEMOIRE, userId, `memoireId:${memoire.id}`);
 
     return memoire;
   }
 
-  async getPendingMemoires() {
-    return this.prisma.memoire.findMany({
-      where: { statut: StatutMemoire.EN_ATTENTE_MODERATION },
-      include: {
-        soumisPar: { select: { nom: true, prenom: true, email: true } },
-        universite: true,
+  async getPendingMemoires(page: number = 1) {
+    const limit = 10;
+    const skip = (page - 1) * limit;
+
+    const [total, data] = await Promise.all([
+      this.prisma.memoire.count({ where: { statut: StatutMemoire.EN_ATTENTE_MODERATION } }),
+      this.prisma.memoire.findMany({
+        where: { statut: StatutMemoire.EN_ATTENTE_MODERATION },
+        include: {
+          soumisPar: { select: { nom: true, prenom: true, email: true } },
+          universite: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       },
-      orderBy: { createdAt: 'desc' },
-    });
+    };
   }
 
-  /* EXISTANT : updateStatus — branché sur l'audit */
+  /* updateStatus — branché sur l'audit */
   async updateStatus(id: string, statut: StatutMemoire, motifRejet?: string, moderateurId?: string) {
     const updated = await this.prisma.memoire.update({
       where: { id },
@@ -113,84 +130,67 @@ export class MemoireService {
     return updated;
   }
 
-  /* Feat 1 : Recherche par mot-clé any|all */
+  /* Recherche par mot-clé any|all */
   async searchByKeyword(dto: SearchMemoireDto, user?: { id: string; role: string }) {
-    const { q, mode, annee, typeDiplome, universiteId, domaineId, page, limit } = dto;
+    const { q, mode, annee, typeDiplome, universiteId, domaineId, page } = dto;
+    const limit = 10;
+    const skip = (page - 1) * limit;
 
-    const safeLimit = Math.min(limit, 100);
-    const skip = (page - 1) * safeLimit;
+    const and: any[] = [buildStatutFilter(user)];
+    if (annee) and.push({ anneeSoutenance: annee });
+    if (typeDiplome) and.push({ typeDiplome });
+    if (universiteId) and.push({ universiteId });
+    if (domaineId) and.push({ domaineId });
 
-    // Construire la contrainte de statut selon le rôle
-    const statutFilter = buildStatutFilter(user);
-
-    const baseWhere: Record<string, unknown> = { ...statutFilter };
-
-    if (annee) baseWhere.anneeSoutenance = annee;
-    if (typeDiplome) baseWhere.typeDiplome = typeDiplome;
-    if (universiteId) baseWhere.universiteId = universiteId;
-    if (domaineId) baseWhere.domaineId = domaineId;
-
-    // Construire le filtre textuel selon mode
     if (q && q.trim()) {
-      const mots = q.trim().split(/\s+/).filter((m) => m.length > 0);
-
+      const mots = q.trim().split(/\s+/).filter(Boolean);
       const buildWordConditions = (mot: string) => [
         { titre: { contains: mot, mode: 'insensitive' as const } },
         { resume: { contains: mot, mode: 'insensitive' as const } },
         { auteurNom: { contains: mot, mode: 'insensitive' as const } },
         { auteurPrenom: { contains: mot, mode: 'insensitive' as const } },
-        {
-          motsCles: {
-            some: {
-              motCle: { libelle: { contains: mot, mode: 'insensitive' as const } },
-            },
-          },
-        },
+        { motsCles: { some: { motCle: { libelle: { contains: mot, mode: 'insensitive' as const } } } } },
       ];
-
-      if (mode === 'any') {
-        // Au moins un mot matche dans au moins un champ
-        const orClauses = mots.flatMap(buildWordConditions);
-        baseWhere.OR = orClauses;
-      } else {
-        // mode === 'all' : chaque mot doit matcher quelque part
-        baseWhere.AND = mots.map((mot) => ({ OR: buildWordConditions(mot) }));
-      }
+      and.push(
+        mode === 'any'
+          ? { OR: mots.flatMap(buildWordConditions) }
+          : { AND: mots.map((mot) => ({ OR: buildWordConditions(mot) })) },
+      );
     }
 
+    const where = { AND: and };
+
     const [total, data] = await Promise.all([
-      this.prisma.memoire.count({ where: baseWhere as any }),
+      this.prisma.memoire.count({ where }),
       this.prisma.memoire.findMany({
-        where: baseWhere as any,
-        include: {
+        where,
+        select: {
+          id: true,
+          titre: true,
+          resume: true,
+          anneeSoutenance: true,
+          typeDiplome: true,
+          statut: true,
+          auteurNom: true,
+          auteurPrenom: true,
           universite: { select: { nom: true, sigle: true } },
           domaine: { select: { nom: true } },
           motsCles: { include: { motCle: { select: { libelle: true } } } },
         },
         orderBy: { anneeSoutenance: 'desc' },
         skip,
-        take: safeLimit,
+        take: limit,
       }),
     ]);
 
-    // Audit : action SEARCH
     this.auditService.log(AuditAction.SEARCH, user?.id, `q="${q ?? ''}" mode=${mode}`);
 
-    return {
-      data,
-      meta: {
-        total,
-        page,
-        limit: safeLimit,
-        totalPages: Math.ceil(total / safeLimit),
-      },
-    };
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async getSimilaires(id: string, dto: SimilaireQueryDto) {
     const safeLimit = Math.min(dto.limit, 20);
 
-    // Vérifier que le mémoire cible existe et est VALIDE
     const target = await this.prisma.memoire.findUnique({
       where: { id, statut: StatutMemoire.VALIDE },
       select: { id: true },
@@ -237,7 +237,6 @@ export class MemoireService {
 
     if (topIds.length === 0) return [];
 
-    // Récupérer les détails des mémoires similaires
     const memoires = await this.prisma.memoire.findMany({
       where: { id: { in: topIds } },
       include: {
@@ -254,7 +253,36 @@ export class MemoireService {
       .sort((a, b) => b.jaccardScore - a.jaccardScore);
   }
 
-  /* Feat 7 : Statistiques de popularité par mémoire */
+  /* Récupérer un mémoire individuel et enregistrer sa consultation */
+  async getMemoireWithConsultation(id: string, ipAddress: string, userAgent: string) {
+    const memoire = await this.prisma.memoire.findUnique({
+      where: { id },
+      include: {
+        universite: { select: { nom: true, sigle: true } },
+        domaine: { select: { nom: true } },
+        motsCles: { include: { motCle: { select: { libelle: true } } } },
+        encadreurs: { include: { encadreur: true } },
+      },
+    });
+
+    if (!memoire) {
+      throw new NotFoundException(`Mémoire introuvable`);
+    }
+
+    if (memoire.statut === StatutMemoire.VALIDE) {
+      await this.prisma.consultation.create({
+        data: {
+          memoireId: id,
+          ipAddress,
+          userAgent,
+        },
+      });
+    }
+
+    return memoire;
+  }
+
+  /* Statistiques de popularité par mémoire */
   async getPopulariteMemoire(id: string) {
     const memoire = await this.prisma.memoire.findUnique({
       where: { id, statut: StatutMemoire.VALIDE },
@@ -277,7 +305,7 @@ export class MemoireService {
     };
   }
 
-  /* Feat 7 : Top global des mémoires les plus consultés */
+  /* Top global des mémoires les plus consultés */
   async getTopMemoires(dto: PopulariteQueryDto) {
     const safeLimit = Math.min(dto.limit, 100);
 
@@ -293,7 +321,6 @@ export class MemoireService {
 
     const memoireIds = grouped.map((g) => g.memoireId);
 
-    /* Récupérer les détails, uniquement VALIDE */
     const memoires = await this.prisma.memoire.findMany({
       where: { id: { in: memoireIds }, statut: StatutMemoire.VALIDE },
       select: {
@@ -312,9 +339,7 @@ export class MemoireService {
     const memoireMap = new Map(memoires.map((m) => [m.id, m]));
 
     /* Combiner avec les counts et retourner dans l'ordre */
-    return grouped
-      .filter((g) => memoireMap.has(g.memoireId))
-      .map((g, index) => ({
+    return grouped.filter((g) => memoireMap.has(g.memoireId)).map((g, index) => ({
         rang: index + 1,
         ...memoireMap.get(g.memoireId)!,
         nbConsultations: g._count.memoireId,
@@ -322,18 +347,15 @@ export class MemoireService {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Helpers internes
-// ─────────────────────────────────────────────────────────────
+/* Helpers internes */
 
 /**
  * Construit la contrainte de statut selon le rôle de l'utilisateur.
- *
- * - PUBLIC / non authentifié → uniquement VALIDE
- * - ETUDIANT → VALIDE + ses propres mémoires (OR)
- * - DOCUMENTALISTE / ADMIN → aucune restriction
+ * PUBLIC / non authentifié → uniquement VALIDE
+ * ETUDIANT → VALIDE + ses propres mémoires (OR)
+ * DOCUMENTALISTE / ADMIN → aucune restriction
  */
-function buildStatutFilter(user?: { id: string; role: string }) {
+const buildStatutFilter = (user?: { id: string; role: string }) => {
   if (!user) return { statut: StatutMemoire.VALIDE };
 
   switch (user.role) {
@@ -346,7 +368,7 @@ function buildStatutFilter(user?: { id: string; role: string }) {
       };
     case 'DOCUMENTALISTE':
     case 'ADMIN':
-      return {}; // Aucun filtre de statut
+      return {};
     default:
       return { statut: StatutMemoire.VALIDE };
   }
