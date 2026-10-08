@@ -54,7 +54,6 @@ export class MemoireController {
     return this.memoireService.getPendingMemoires(pageNumber > 0 ? pageNumber : 1);
   }
 
-  /* Mettre à jour le statut existant */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.DOCUMENTALISTE, Role.ADMIN)
   @Patch('moderation/:id/status')
@@ -67,43 +66,20 @@ export class MemoireController {
   }
 
   /* Recherche par mot-clé any|all existant */
-  /* GET /api/memoires/search
-   * Recherche les mémoires par mots-clés.
-   * - `mode=any` (défaut) : au moins un mot matche
-   * - `mode=all` : tous les mots doivent matcher
-   *
-   * Rôle PUBLIC → uniquement VALIDE
-   * Rôle ETUDIANT → VALIDE + ses propres mémoires
-   * Rôle DOC/ADMIN → tout
-   */
   @UseGuards(OptionalJwtGuard)
   @Get('memoires/search')
   async searchByKeyword(
     @Query() query: SearchMemoireDto,
     @Request() req: any,
   ) {
-    // L'endpoint est public mais on lit le user s'il est connecté
     return this.memoireService.searchByKeyword(query, req.user);
   }
 
-  /* FEATURE 7 : Top global des mémoires les plus consultés */
-  /* GET /api/memoires/top
-   * Classement global des mémoires VALIDE par nombre de consultations.
-   * Accessible sans authentification.
-   * @query limit - Nombre de résultats (1-100, défaut 10)
-   */
   @Get('memoires/top')
   async getTop(@Query() query: PopulariteQueryDto) {
     return this.memoireService.getTopMemoires(query);
   }
 
-  /* Recommandation Jaccard existant */
-  /* GET /api/memoires/:id/similaires
-   * Retourne les mémoires VALIDE les plus similaires via l'indice de Jaccard
-   * calculé sur les mots-clés communs. Accessible sans authentification.
-   * @param id - UUID du mémoire cible
-   * @query limit - Nombre de suggestions (1-20, défaut 5)
-   */
   @Get('memoires/:id/similaires')
   async getSimilaires(
     @Param('id', ParseUUIDPipe) id: string,
@@ -112,20 +88,11 @@ export class MemoireController {
     return this.memoireService.getSimilaires(id, query);
   }
 
-  /* Popularité d'un mémoire spécifique existant */
-  /* GET /api/memoires/:id/popularite
-   * Retourne le nombre total de consultations d'un mémoire VALIDE.
-   * Accessible sans authentification.
-   */
   @Get('memoires/:id/popularite')
   async getPopularite(@Param('id', ParseUUIDPipe) id: string) {
     return this.memoireService.getPopulariteMemoire(id);
   }
 
-  /* GET /api/memoires/:id
-   * Récupère un mémoire par son ID et enregistre une consultation.
-   * Accessible sans authentification (ou selon les règles d'accès public).
-   */
   @Get('memoires/:id')
   async getMemoire(
     @Param('id', ParseUUIDPipe) id: string,

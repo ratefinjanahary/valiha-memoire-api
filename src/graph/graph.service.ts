@@ -7,7 +7,6 @@ export class GraphService {
   constructor(private prisma: PrismaService) {}
 
   async getGraphData() {
-    // Récupérer toutes les entités
     const universites = await this.prisma.universite.findMany();
     const domaines = await this.prisma.domaine.findMany();
     const encadreurs = await this.prisma.encadreur.findMany();
@@ -19,17 +18,16 @@ export class GraphService {
     const nodes: any[] = [];
     const edges: any[] = [];
 
-    // Ajouter les noeuds universités
+    /* Ajouter les noeuds universités */
     universites.forEach((u: Universite) => {
       nodes.push({ id: `univ_${u.id}`, label: u.sigle || u.nom, type: 'universite' });
     });
 
-    // Ajouter les noeuds domaines
+    /* Idem */
     domaines.forEach((d: Domaine) => {
       nodes.push({ id: `dom_${d.id}`, label: d.nom, type: 'domaine' });
     });
 
-    // Ajouter les noeuds encadreurs
     encadreurs.forEach((e: Encadreur) => {
       nodes.push({ id: `enc_${e.id}`, label: `${e.nom} ${e.prenom}`, type: 'encadreur' });
     });

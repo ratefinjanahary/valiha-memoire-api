@@ -133,10 +133,10 @@ export class MemoireService {
   /* Recherche par mot-clé any|all */
   async searchByKeyword(dto: SearchMemoireDto, user?: { id: string; role: string }) {
     const { q, mode, annee, typeDiplome, universiteId, domaineId, page } = dto;
-    const limit = 10;
+    const limit = 2;
     const skip = (page - 1) * limit;
 
-    const and: any[] = [buildStatutFilter(user)];
+    const and: any[] = [{ statut: StatutMemoire.VALIDE }];
     if (annee) and.push({ anneeSoutenance: annee });
     if (typeDiplome) and.push({ typeDiplome });
     if (universiteId) and.push({ universiteId });
@@ -170,12 +170,19 @@ export class MemoireService {
           resume: true,
           anneeSoutenance: true,
           typeDiplome: true,
-          statut: true,
           auteurNom: true,
           auteurPrenom: true,
           universite: { select: { nom: true, sigle: true } },
           domaine: { select: { nom: true } },
-          motsCles: { include: { motCle: { select: { libelle: true } } } },
+          motsCles: {
+            select: {
+              motCle: {
+                select: {
+                  libelle: true,
+                },
+              },
+            },
+          },
         },
         orderBy: { anneeSoutenance: 'desc' },
         skip,

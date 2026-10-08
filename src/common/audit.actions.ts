@@ -11,6 +11,8 @@ export const AuditAction = {
   EXPORT_BIBTEX: 'EXPORT_BIBTEX',
   LOGIN: 'LOGIN',
   REGISTER: 'REGISTER',
+  UPDATE_ROLE: 'UPDATE_ROLE',
+  DELETE_USER: 'DELETE_USER',
 } as const;
 
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];

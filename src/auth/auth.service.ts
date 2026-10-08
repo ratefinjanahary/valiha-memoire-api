@@ -94,4 +94,96 @@ export class AuthService {
       },
     });
   }
+
+  async getUsers(page: number = 1, limit: number = 10, search?: string) {
+    const skip = (page - 1) * limit;
+    const where: any = {};
+
+    if (search) {
+      where.OR = [
+        { nom: { contains: search, mode: 'insensitive' } },
+        { prenom: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [total, items] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          email: true,
+          nom: true,
+          prenom: true,
+          role: true,
+          isActif: true,
+          createdAt: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async updateUserRole(id: string, role: Role, adminId: string) {
+    const userExists = await this.prisma.user.findUnique({ where: { id } });
+    if (!userExists) {
+      throw new ConflictException("L'utilisateur n'existe pas");
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id },
+      data: { role },
+    });
+
+    this.auditService.log(
+      AuditAction.UPDATE_ROLE,
+      adminId,
+      `role_updated_for:${updatedUser.email}_to:${role}`,
+    );
+
+    return {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      nom: updatedUser.nom,
+      prenom: updatedUser.prenom,
+      role: updatedUser.role,
+    };
+  }
+
+  async deleteUser(id: string, requesterId: string, isAdmin: boolean) {
+    const userExists = await this.prisma.user.findUnique({ where: { id } });
+    if (!userExists) {
+      throw new ConflictException("L'utilisateur n'existe pas");
+    }
+
+    // Seul un admin ou l'utilisateur lui-même peut supprimer le compte
+    if (!isAdmin && requesterId !== id) {
+      throw new UnauthorizedException("Vous n'êtes pas autorisé à supprimer ce compte");
+    }
+
+    await this.prisma.user.delete({
+      where: { id },
+    });
+
+    this.auditService.log(
+      AuditAction.DELETE_USER,
+      requesterId,
+      `user_deleted_id:${id}_email:${userExists.email}_by:${isAdmin ? 'ADMIN' : 'SELF'}`,
+    );
+
+    return { success: true, message: 'Utilisateur supprimé avec succès' };
+  }
 }
