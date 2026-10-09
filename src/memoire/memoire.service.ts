@@ -1,5 +1,4 @@
-
-import { Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { GoogleAiService } from '../search/google-ai.service.js';
 import 'multer';
@@ -28,7 +27,32 @@ export class MemoireService {
     private readonly auditService: AuditService,
   ) {}
 
+  /**
+   * Vérifie que les encadreurs référencés existent (et que l'auteur n'est pas son propre encadreur).
+   * Appelé AVANT l'upload du PDF pour ne pas laisser de fichier orphelin en cas d'erreur.
+   */
+  private async assertEncadreursValides(encadreurIds: string[], auteurEncadreurId?: string) {
+    if (auteurEncadreurId && encadreurIds.includes(auteurEncadreurId)) {
+      throw new BadRequestException("L'auteur d'un mémoire ne peut pas en être aussi l'encadreur");
+    }
+
+    const idsToCheck = auteurEncadreurId ? [...encadreurIds, auteurEncadreurId] : encadreurIds;
+    const found = await this.prisma.encadreur.findMany({
+      where: { id: { in: idsToCheck } },
+      select: { id: true },
+    });
+    const foundIds = new Set(found.map((e) => e.id));
+    const missing = idsToCheck.filter((id) => !foundIds.has(id));
+
+    if (missing.length > 0) {
+      throw new BadRequestException(`Encadreur(s) introuvable(s) : ${missing.join(', ')}`);
+    }
+  }
+
   async submitMemoire(data: SubmitMemoireDto, file: Express.Multer.File, userId: string) {
+    const encadreurIds = [...new Set(data.encadreurIds)];
+    await this.assertEncadreursValides(encadreurIds, data.auteurEncadreurId);
+
     const pdfUrl = await this.fileStorage.uploadFile(file, 'memoires');
 
     let resume = data.resume || '';
@@ -56,6 +80,10 @@ export class MemoireService {
         soumisParId: userId,
         universiteId: data.universiteId,
         domaineId: data.domaineId,
+        auteurEncadreurId: data.auteurEncadreurId ?? null,
+        encadreurs: {
+          create: encadreurIds.map((encadreurId) => ({ encadreurId })),
+        },
       },
     });
 

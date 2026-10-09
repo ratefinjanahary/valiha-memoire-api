@@ -8,6 +8,12 @@ Voici la documentation complète des endpoints de l'API `valiha-api`, adaptée p
 
 Pour tester efficacement cette API, voici la méthode de test manuelle recommandée :
 
+### 0. Prérequis (feature Encadreurs & Graphe)
+* Schéma appliqué : `npx prisma db push` (ou `npx prisma migrate dev`), puis redémarrer l'API.
+* `EncadreurModule` ajouté aux `imports` de `AppModule` (sinon `/api/encadreurs` renvoie 404).
+* ⚠️ **Désormais, soumettre un mémoire exige au moins un encadreur** : créez d'abord vos encadreurs (section 5 bis).
+* Scénario complet bout en bout : voir la section **11** en bas du document.
+
 ### 1. Santé & Création de compte
 * Testez la route principale `GET http://localhost:3000/` pour vérifier que l'API est en ligne.
 * Utilisez l'endpoint d'inscription (`POST /api/auth/register`) pour vous créer un utilisateur avec le rôle `ADMIN` ou `DOCUMENTALISTE`.
@@ -123,6 +129,63 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 ---
 
+### 5 bis. 🧑‍🏫 Encadreurs (`/api/encadreurs`)
+
+* **Lister / rechercher les encadreurs** (alimente le ComboBox de soumission)
+  * **Méthode** : `GET`
+  * **URL** :     `http://localhost:3000/api/encadreurs`
+  * **Auth** : Aucune par défaut (si vous avez ajouté un guard sur cette route, collez le Bearer Token)
+  * **Query Parameters** (Optionnels) :
+    * `q` : `rakoto jean` *(chaque mot doit matcher le nom, le prénom ou le titre, sans tenir compte de la casse ni de l'ordre)*
+    * `page` : `1` *(défaut 1)*
+    * `limit` : `10` *(défaut 10, max 50)*
+  * **Exemples** :
+    * `GET /api/encadreurs` → première page, 10 encadreurs triés par nom
+    * `GET /api/encadreurs?q=rakoto&limit=5`
+    * `GET /api/encadreurs?q=dr+jean&page=2`
+  * 💡 *L'email n'est volontairement pas renvoyé. `nbMemoiresEncadres` / `nbMemoiresAuteur` servent à départager les homonymes dans le ComboBox.*
+  * **Réponse** :
+    ```json
+    {
+      "data": [
+        {
+          "id": "3f1c...-uuid",
+          "nom": "Rakoto",
+          "prenom": "Jean",
+          "titre": "Dr",
+          "nbMemoiresEncadres": 3,
+          "nbMemoiresAuteur": 1
+        }
+      ],
+      "meta": { "total": 1, "page": 1, "limit": 10, "totalPages": 1 }
+    }
+    ```
+
+* **Créer un encadreur**
+  * **Méthode** : `POST`
+  * **URL** :     `http://localhost:3000/api/encadreurs`
+  * **Auth** : Bearer Token si vous avez protégé la route (le `TODO` guard dans le controller)
+  * **Body (JSON)** :
+    ```json
+    {
+      "nom": "Rakoto",
+      "prenom": "Jean",
+      "titre": "Dr",
+      "email": "jean.rakoto@example.com"
+    }
+    ```
+    * `titre` et `email` sont optionnels (une chaîne vide `""` est traitée comme absente).
+  * **Réponse** : l'encadreur créé (`id`, `nom`, `prenom`, `titre`, `email`, `createdAt`). **Copiez l'`id`**, il sert pour la soumission d'un mémoire.
+  * **Cas d'erreur à tester** :
+
+    | Requête | Résultat attendu |
+    |---|---|
+    | `nom` de 1 caractère | `400` (« Le nom est requis ») |
+    | `email` invalide | `400` (« Email invalide ») |
+    | Même `email` envoyé deux fois (casse différente comprise) | `409` (« Un encadreur avec cet email existe déjà ») |
+
+---
+
 ### 6. 🎓 Mémoires - Recherche & Actions (`/api/memoires`)
 
 #### ✅ Feat - Recherche par mot-clé `any|all` (PUBLIC)
@@ -190,7 +253,20 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
       * `auteurEmail` : `jane@example.com`
       * `universiteId` : `(UUID valide)`
       * `domaineId` : `(UUID valide)`
+      * `encadreurIds` : `(UUID d'un encadreur)` — **obligatoire, 1 à 5**. Pour en mettre plusieurs, **ajoutez une ligne par encadreur avec la même clé `encadreurIds`**.
+        * Alternatives acceptées si votre client ne gère pas les clés répétées : un seul champ avec du JSON (`["uuid1","uuid2"]`) ou une liste séparée par des virgules (`uuid1,uuid2`).
+      * `auteurEncadreurId` : `(UUID d'un encadreur)` — **optionnel**. À renseigner si l'auteur du mémoire est lui-même un encadreur déjà enregistré (crée l'arête `auteur_de` dans le graphe). Laissez vide ou omettez sinon.
   * 📝 *Action auditée : `SUBMIT_MEMOIRE`*
+  * **Cas d'erreur à tester** (tous en `400`, et **aucun PDF n'est uploadé** : la validation se fait avant) :
+
+    | Requête | Message attendu |
+    |---|---|
+    | Pas de `encadreurIds` | « Au moins un encadreur est requis » |
+    | `encadreurIds` = `abc` | « ID encadreur invalide » |
+    | 6 UUID dans `encadreurIds` | « 5 encadreurs maximum » |
+    | UUID valide mais inexistant | « Encadreur(s) introuvable(s) : ... » |
+    | `auteurEncadreurId` identique à un des `encadreurIds` | « L'auteur d'un mémoire ne peut pas en être aussi l'encadreur » |
+  * 💡 *Après soumission, le mémoire est `EN_ATTENTE_MODERATION` : il n'apparaît dans le graphe qu'après passage en `VALIDE` (section 7).*
 
 ---
 
@@ -318,6 +394,38 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 * **Graphe de relations**
   * **Méthode** : `GET`
   * **URL** :     `http://localhost:3000/api/graph/data`
+  * **Auth** : Aucune
+  * 💡 *Ne renvoie que les mémoires `VALIDE` et les noeuds (universités, domaines, encadreurs) reliés à au moins un d'eux : pas de noeud orphelin.*
+  * **Types de noeuds** : `universite`, `domaine`, `encadreur`, `memoire` (ids préfixés `univ_`, `dom_`, `enc_`, `mem_`).
+  * **Types d'arêtes** :
+
+    | Type | Sens | Signification |
+    |---|---|---|
+    | `appartient_a` | mémoire → université | où le mémoire a été soutenu |
+    | `traite_de` | mémoire → domaine | domaine du mémoire |
+    | `encadre_par` | mémoire → encadreur | encadrement |
+    | `auteur_de` | encadreur → mémoire | l'encadreur est l'auteur de ce mémoire (son propre mémoire) |
+  * **Réponse (extrait)** :
+    ```json
+    {
+      "nodes": [
+        { "id": "univ_<uuid>", "label": "UA", "type": "universite", "data": { "refId": "<uuid>", "nom": "Université d'Antananarivo" } },
+        { "id": "dom_<uuid>", "label": "Informatique", "type": "domaine", "data": { "refId": "<uuid>" } },
+        { "id": "enc_<uuid>", "label": "Rakoto Jean", "type": "encadreur", "data": { "refId": "<uuid>", "titre": "Dr" } },
+        { "id": "mem_<uuid>", "label": "Développement d'une API", "type": "memoire",
+          "data": { "refId": "<uuid>", "anneeSoutenance": 2024, "typeDiplome": "MASTER", "auteur": "Jane Doe" } }
+      ],
+      "edges": [
+        { "id": "encadre_par:mem_<uuid>:enc_<uuid>", "source": "mem_<uuid>", "target": "enc_<uuid>", "type": "encadre_par" },
+        { "id": "auteur_de:enc_<uuid>:mem_<uuid>", "source": "enc_<uuid>", "target": "mem_<uuid>", "type": "auteur_de" }
+      ]
+    }
+    ```
+  * **À vérifier** :
+    * chaque `edges[].id` est unique ;
+    * chaque `source` et `target` correspond à un `nodes[].id` existant ;
+    * un mémoire encore `EN_ATTENTE_MODERATION` ou `REJETTE` n'apparaît pas ;
+    * un mémoire déjà en base **sans** liaison encadreur apparaît quand même, mais sans arête `encadre_par` (liaison à faire à la main dans Prisma Studio, table `memoire_encadreurs`).
 
 * **Récupérer les KPIs**
   * **Méthode** : `GET`
@@ -342,6 +450,26 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 
 ---
 
+### 11. 🧪 Scénario complet : encadreurs + graphe
+
+Objectif : obtenir une petite lignée « A encadre M1, A est auteur de M2, B encadre M2 ».
+Prérequis : être connecté, avoir au moins une université et un domaine (copiez leurs UUID via `GET /api/universites` et `GET /api/domaine`).
+
+1. **Créer l'encadreur A** : `POST /api/encadreurs` avec `{ "nom": "Rakoto", "prenom": "Jean", "titre": "Dr" }` → notez `idA`.
+2. **Créer l'encadreur B** : `POST /api/encadreurs` avec `{ "nom": "Rasoa", "prenom": "Marie", "titre": "Pr" }` → notez `idB`.
+3. **Tester le ComboBox** : `GET /api/encadreurs?q=rak` doit renvoyer A seul ; `GET /api/encadreurs?limit=1` doit renvoyer 1 résultat avec `totalPages` = 2.
+4. **Soumettre M1** (Telegraph, `multipart/form-data`) avec `encadreurIds` = `idA` et sans `auteurEncadreurId` → notez `idM1`.
+5. **Soumettre M2** avec `encadreurIds` = `idB` et `auteurEncadreurId` = `idA` → notez `idM2`.
+6. **Valider M1 et M2** : `PATCH /api/moderation/:id/status` avec `{ "statut": "VALIDE" }` (token DOCUMENTALISTE/ADMIN), une fois par mémoire.
+7. **Appeler le graphe** : `GET /api/graph/data`. Résultat attendu :
+   * 2 noeuds `encadreur`, 2 noeuds `memoire`, et leurs université/domaine ;
+   * `encadre_par` : `mem_idM1 → enc_idA` et `mem_idM2 → enc_idB` ;
+   * `auteur_de` : `enc_idA → mem_idM2`.
+8. **Vérifier le filtre** : soumettez M3 sans le valider, rappelez le graphe : M3 ne doit pas y figurer.
+9. **Vérifier la liste enrichie** : `GET /api/encadreurs?q=rakoto` doit afficher `nbMemoiresEncadres: 1` et `nbMemoiresAuteur: 1` pour A.
+
+---
+
 ## 🗺️ Récapitulatif des nouvelles features
 
 | Feature                  | Endpoint                       | Méthode | Rôle min. | Cache |
@@ -352,6 +480,11 @@ Pour chaque requête nécessitant d'être connecté (marquée "Protégée" ci-de
 | **5** Liste des audits   | `/api/audit`                   | GET     | ADMIN     | —     |
 | **7** Popularité mémoire | `/api/memoires/:id/popularite` | GET     | PUBLIC    | —     |
 | **7** Top consultés      | `/api/memoires/top`            | GET     | PUBLIC    | —     |
+| **8** Liste encadreurs   | `/api/encadreurs`              | GET     | PUBLIC*   | —     |
+| **8** Créer un encadreur | `/api/encadreurs`              | POST    | selon guard* | —  |
+| **9** Graphe de relations| `/api/graph/data`              | GET     | PUBLIC    | —     |
+
+\* Aucun guard n'est posé par défaut sur `/api/encadreurs` (voir le `TODO` dans `encadreur.controller.ts`).
 
 ## 🔒 Actions auditées automatiquement
 

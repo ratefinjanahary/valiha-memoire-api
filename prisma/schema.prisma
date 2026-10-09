@@ -77,7 +77,8 @@ model Encadreur {
   email     String?
   createdAt DateTime @default(now()) @map("created_at")
 
-  memoires MemoireEncadreur[]
+  memoires       MemoireEncadreur[]                       // mémoires qu'il a encadrés
+  memoiresAuteur Memoire[]          @relation("AuteurEncadreur") // ses propres mémoires (en tant qu'auteur)
 
   @@map("encadreurs")
 }
@@ -121,6 +122,10 @@ model Memoire {
   domaineId       String        @map("domaine_id")
   domaine         Domaine       @relation(fields: [domaineId], references: [id])
 
+  // Renseigné si l'auteur du mémoire est (devenu) un encadreur enregistré
+  auteurEncadreurId String?     @map("auteur_encadreur_id")
+  auteurEncadreur   Encadreur?  @relation("AuteurEncadreur", fields: [auteurEncadreurId], references: [id], onDelete: SetNull)
+
   encadreurs      MemoireEncadreur[]
   motsCles        MemoireMotCle[]
   consultations   Consultation[]
@@ -128,6 +133,7 @@ model Memoire {
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
+  @@index([auteurEncadreurId])
   @@map("memoires")
 }
 
@@ -140,6 +146,7 @@ model MemoireEncadreur {
   encadreur Encadreur @relation(fields: [encadreurId], references: [id], onDelete: Cascade)
 
   @@id([memoireId, encadreurId])
+  @@index([encadreurId])
   @@map("memoire_encadreurs")
 }
 
