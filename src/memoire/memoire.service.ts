@@ -161,7 +161,7 @@ export class MemoireService {
   /* Recherche par mot-clé any|all */
   async searchByKeyword(dto: SearchMemoireDto, user?: { id: string; role: string }) {
     const { q, mode, annee, typeDiplome, universiteId, domaineId, page } = dto;
-    const limit = 2;
+    const limit = 3;
     const skip = (page - 1) * limit;
 
     const and: any[] = [{ statut: StatutMemoire.VALIDE }];
@@ -217,8 +217,6 @@ export class MemoireService {
         take: limit,
       }),
     ]);
-
-    this.auditService.log(AuditAction.SEARCH, user?.id, `q="${q ?? ''}" mode=${mode}`);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
@@ -379,32 +377,5 @@ export class MemoireService {
         ...memoireMap.get(g.memoireId)!,
         nbConsultations: g._count.memoireId,
       }));
-  }
-}
-
-/* Helpers internes */
-
-/**
- * Construit la contrainte de statut selon le rôle de l'utilisateur.
- * PUBLIC / non authentifié → uniquement VALIDE
- * ETUDIANT → VALIDE + ses propres mémoires (OR)
- * DOCUMENTALISTE / ADMIN → aucune restriction
- */
-const buildStatutFilter = (user?: { id: string; role: string }) => {
-  if (!user) return { statut: StatutMemoire.VALIDE };
-
-  switch (user.role) {
-    case 'ETUDIANT':
-      return {
-        OR: [
-          { statut: StatutMemoire.VALIDE },
-          { soumisParId: user.id },
-        ],
-      };
-    case 'DOCUMENTALISTE':
-    case 'ADMIN':
-      return {};
-    default:
-      return { statut: StatutMemoire.VALIDE };
   }
 }
