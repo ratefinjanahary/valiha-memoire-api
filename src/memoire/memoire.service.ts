@@ -49,6 +49,12 @@ export class MemoireService {
     }
   }
 
+  private normaliserMotsCles(mots: string[]) {
+    return [...new Set(
+      mots.map((m) => m.normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' ')).filter((m) => m.length >= 2),
+    )].slice(0, 10);
+  }
+
   async submitMemoire(data: SubmitMemoireDto, file: Express.Multer.File, userId: string) {
     const encadreurIds = [...new Set(data.encadreurIds)];
     await this.assertEncadreursValides(encadreurIds, data.auteurEncadreurId);
@@ -64,6 +70,10 @@ export class MemoireService {
         this.logger.error('Failed to parse PDF', error);
       }
     }
+
+    const motsCles = this.normaliserMotsCles(
+      data.motsCles?.length ? data.motsCles : await this.aiService.extractKeywords(data.titre, resume),
+    );
 
     const memoire = await this.prisma.memoire.create({
       data: {
@@ -84,12 +94,17 @@ export class MemoireService {
         encadreurs: {
           create: encadreurIds.map((encadreurId) => ({ encadreurId })),
         },
+        motsCles: {
+          create: motsCles.map((libelle) => ({
+            motCle: { connectOrCreate: { where: { libelle }, create: { libelle } } },
+          })),
+        },
       },
     });
 
     try {
-      const textToEmbed = `${data.titre}. ${resume}`;
-      const embedding = await this.aiService.generateEmbedding(textToEmbed);
+      const textToEmbed = `${data.titre}. ${resume}. Mots-clés : ${motsCles.join(', ')}`;
+      const embedding = await this.aiService.generateEmbedding(textToEmbed, 'RETRIEVAL_DOCUMENT');
       if (embedding && embedding.length > 0) {
         const embeddingString = `[${embedding.join(',')}]`;
         await this.prisma.$executeRawUnsafe(`

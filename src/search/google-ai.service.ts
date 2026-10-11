@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 
 @Injectable()
 export class GoogleAiService {
@@ -15,12 +15,13 @@ export class GoogleAiService {
     this.ai = new GoogleGenAI({ apiKey: apiKey || 'dummy-key' });
   }
 
-  async generateEmbedding(text: string): Promise<number[]> {
+  async generateEmbedding(text: string, taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' = 'RETRIEVAL_QUERY'): Promise<number[]> {
     try {
       this.logger.debug(`Generating embedding for text (${text.length} chars)...`);
       const response = await this.ai.models.embedContent({
         model: this.embeddingModel,
         contents: text,
+        config: { taskType }
       });
       const values = response.embeddings?.[0]?.values || [];
       this.logger.debug(`Embedding generated successfully: ${values.length} dimensions`);
@@ -31,6 +32,27 @@ export class GoogleAiService {
         error?.stack,
       );
       throw new Error(`Erreur lors de la génération de l'embedding: ${error?.message}`);
+    }
+  }
+
+  async extractKeywords(titre: string, resume: string): Promise<string[]> {
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash', // ou le flash courant
+        contents: `Titre : ${titre}\nRésumé : ${resume}`,
+        config: {
+          systemInstruction:
+            "Extrais 5 à 8 mots-clés académiques de ce mémoire, en français, en minuscules, 1 à 3 mots chacun, sans doublons. Réponds uniquement avec un tableau JSON de chaînes.",
+          responseMimeType: 'application/json',
+          responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } },
+          temperature: 0.2,
+        },
+      });
+      const parsed = JSON.parse(response.text ?? '[]');
+      return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+    } catch (e: any) {
+      this.logger.warn(`Keyword extraction failed: ${e?.message}`);
+      return []; // non bloquant : la soumission continue sans mots-clés
     }
   }
 }

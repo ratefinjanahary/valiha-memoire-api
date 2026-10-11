@@ -60,18 +60,20 @@ export class SearchService {
 
       // Convertir l'array TS en string au format vector(3072) pour pgvector: '[0.1, 0.2, ...]'
       const embeddingString = `[${embedding.join(',')}]`;
+      const minSimilarity = Number(process.env.SEMANTIC_MIN_SIMILARITY ?? 0.6);
 
       // 2. Effectuer la recherche par similarité (Cosinus : 1 - (A <=> B))
-      // On ne retourne que les mémoires VALIDES
       const results = await this.prisma.$queryRawUnsafe(`
         SELECT m.id, m.titre, m.resume, m."annee_soutenance" as "anneeSoutenance",
-               m."auteur_nom" as "auteurNom", m."auteur_prenom" as "auteurPrenom",
-               1 - (m.embedding <=> $1::vector) as similarity
+              m."auteur_nom" as "auteurNom", m."auteur_prenom" as "auteurPrenom",
+              1 - (m.embedding <=> $1::vector) as similarity
         FROM memoires m
-        WHERE m.statut = 'VALIDE' AND m.embedding IS NOT NULL
+        WHERE m.statut = 'VALIDE'
+          AND m.embedding IS NOT NULL
+          AND (m.embedding <=> $1::vector) < $2::float8
         ORDER BY m.embedding <=> $1::vector
         LIMIT 10;
-      `, embeddingString);
+      `, embeddingString, 1 - minSimilarity);
 
       this.logger.log(`Semantic search returned ${(results as any[]).length} results`);
       return results;

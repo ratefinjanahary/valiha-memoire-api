@@ -48,6 +48,9 @@ const SubmitMemoireSchema = z.object({
   auteurEncadreurId: z
     .preprocess(emptyToUndefined, z.uuid({ message: 'ID encadreur auteur invalide' }).optional())
     .optional(),
+  motsCles: z.preprocess(toStringArray,
+    z.array(z.string().trim().min(2).max(50)).max(10),
+  ).optional(),
 });
 
 export class SubmitMemoireDto extends createZodDto(SubmitMemoireSchema) {}
