@@ -13,6 +13,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { MAX_PDF_SIZE, pdfParseFilePipe } from './pdf-file.validator.js';
 import 'multer';
 import { MemoireService } from './memoire.service.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
@@ -33,15 +34,12 @@ export class MemoireController {
   /* Soumettre un mémoire existant */
   @UseGuards(JwtAuthGuard)
   @Post('memoires/submit')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_PDF_SIZE } }))
   async submitMemoire(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(pdfParseFilePipe()) file: Express.Multer.File,
     @Body() body: SubmitMemoireDto,
     @Request() req: any,
   ) {
-    if (!file) {
-      throw new Error('Le fichier PDF est requis');
-    }
     return this.memoireService.submitMemoire(body, file, req.user.id);
   }
 

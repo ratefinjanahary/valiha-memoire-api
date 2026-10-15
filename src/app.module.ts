@@ -13,13 +13,16 @@ import { UniversiteModule } from './universite/universite.module.js';
 import { DomaineModule } from './domaine/domaine.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { MotCleModule } from './mot-cle/mot-cle.module.js';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
     PrismaModule,
     StorageModule,
-    // AuditModule DOIT être importé en premier car il est @Global()
-    // et fournit AuditService à tous les autres modules
     AuditModule,
     AuthModule,
     EncadreurModule,

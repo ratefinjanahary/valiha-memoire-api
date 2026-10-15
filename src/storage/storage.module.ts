@@ -1,15 +1,13 @@
 import { Global, Module } from '@nestjs/common';
-import { LocalFileStorageService } from './local-storage.service.js';
+import { GoogleDriveService } from './google-drive.service.js';
 
 export const FILE_STORAGE_SERVICE = 'FILE_STORAGE_SERVICE';
 
 @Global()
 @Module({
   providers: [
-    {
-      provide: FILE_STORAGE_SERVICE,
-      useClass: LocalFileStorageService,
-    },
+    GoogleDriveService,
+    { provide: FILE_STORAGE_SERVICE, useExisting: GoogleDriveService },
   ],
   exports: [FILE_STORAGE_SERVICE],
 })

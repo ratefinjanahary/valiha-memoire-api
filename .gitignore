@@ -131,3 +131,7 @@ Thumbs.db
 
 # NestJS build output
 dist/
+
+#Google drive config
+secrets/
+secrets/*

@@ -4,7 +4,7 @@ import { GoogleAiService } from '../search/google-ai.service.js';
 import 'multer';
 import type { IFileStorage } from '../storage/storage.interface.js';
 import { FILE_STORAGE_SERVICE } from '../storage/storage.module.js';
-import { StatutMemoire, TypeDiplome } from '@prisma/client';
+import { StatutMemoire, TypeDiplome, Memoire } from '@prisma/client';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
@@ -61,55 +61,69 @@ export class MemoireService {
 
     const pdfUrl = await this.fileStorage.uploadFile(file, 'memoires');
 
+    let memoire: Memoire;
     let resume = data.resume || '';
-    if (!resume) {
-      try {
-        const pdfData = await pdfParse(file.buffer);
-        resume = pdfData.text.substring(0, 1000) + '...';
-      } catch (error) {
-        this.logger.error('Failed to parse PDF', error);
+    let motsCles: string[] = [];
+
+    // 1) Création du mémoire en BD. Si quelque chose plante, on supprime le PDF de Drive.
+    try {
+      if (!resume) {
+        try {
+          const pdfData = await pdfParse(file.buffer);
+          const text: string = pdfData.text.trim();
+          resume = text.length > 1000 ? text.substring(0, 1000) + '...' : text;
+        } catch (error) {
+          this.logger.error('Failed to parse PDF', error);
+        }
       }
+
+      motsCles = this.normaliserMotsCles(
+        data.motsCles?.length ? data.motsCles : await this.aiService.extractKeywords(data.titre, resume),
+      );
+
+      memoire = await this.prisma.memoire.create({
+        data: {
+          titre: data.titre,
+          resume: resume,
+          anneeSoutenance: parseInt(data.anneeSoutenance, 10),
+          typeDiplome: data.typeDiplome as TypeDiplome,
+          statut: StatutMemoire.EN_ATTENTE_MODERATION,
+          pdfUrl: pdfUrl,
+          tailleFichier: file.size,
+          auteurNom: data.auteurNom,
+          auteurPrenom: data.auteurPrenom,
+          auteurEmail: data.auteurEmail,
+          soumisParId: userId,
+          universiteId: data.universiteId,
+          domaineId: data.domaineId,
+          auteurEncadreurId: data.auteurEncadreurId ?? null,
+          encadreurs: {
+            create: encadreurIds.map((encadreurId) => ({ encadreurId })),
+          },
+          motsCles: {
+            create: motsCles.map((libelle) => ({
+              motCle: { connectOrCreate: { where: { libelle }, create: { libelle } } },
+            })),
+          },
+        },
+      });
+    } catch (error) {
+      // Rollback : on ne laisse pas de PDF orphelin sur Drive
+      await this.fileStorage.deleteFile(pdfUrl);
+      throw error;
     }
 
-    const motsCles = this.normaliserMotsCles(
-      data.motsCles?.length ? data.motsCles : await this.aiService.extractKeywords(data.titre, resume),
-    );
-
-    const memoire = await this.prisma.memoire.create({
-      data: {
-        titre: data.titre,
-        resume: resume,
-        anneeSoutenance: parseInt(data.anneeSoutenance, 10),
-        typeDiplome: data.typeDiplome as TypeDiplome,
-        statut: StatutMemoire.EN_ATTENTE_MODERATION,
-        pdfUrl: pdfUrl,
-        tailleFichier: file.size,
-        auteurNom: data.auteurNom,
-        auteurPrenom: data.auteurPrenom,
-        auteurEmail: data.auteurEmail,
-        soumisParId: userId,
-        universiteId: data.universiteId,
-        domaineId: data.domaineId,
-        auteurEncadreurId: data.auteurEncadreurId ?? null,
-        encadreurs: {
-          create: encadreurIds.map((encadreurId) => ({ encadreurId })),
-        },
-        motsCles: {
-          create: motsCles.map((libelle) => ({
-            motCle: { connectOrCreate: { where: { libelle }, create: { libelle } } },
-          })),
-        },
-      },
-    });
-
+    // 2) Embedding : non bloquant, un échec est juste loggé (le mémoire existe déjà)
     try {
       const textToEmbed = `${data.titre}. ${resume}. Mots-clés : ${motsCles.join(', ')}`;
       const embedding = await this.aiService.generateEmbedding(textToEmbed, 'RETRIEVAL_DOCUMENT');
       if (embedding && embedding.length > 0) {
         const embeddingString = `[${embedding.join(',')}]`;
-        await this.prisma.$executeRawUnsafe(`
-          UPDATE memoires SET embedding = $1::vector WHERE id = $2;
-        `, embeddingString, memoire.id);
+        await this.prisma.$executeRawUnsafe(
+          `UPDATE memoires SET embedding = $1::vector WHERE id = $2;`,
+          embeddingString,
+          memoire.id,
+        );
       }
     } catch (e) {
       this.logger.error(`Error generating embedding for memoire ${memoire.id}`, e);
