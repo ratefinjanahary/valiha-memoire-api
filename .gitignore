@@ -135,3 +135,6 @@ dist/
 #Google drive config
 secrets/
 secrets/*
+
+# Generated prisma client
+/src/generated/
