@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MemoryCacheService } from '../common/memory.cache.service.js';
-import { StatutMemoire } from '@prisma/client';
+import { StatutMemoire } from '../generated/prisma/client.js';
 
 export interface TrendingItem {
   motCleId: string;

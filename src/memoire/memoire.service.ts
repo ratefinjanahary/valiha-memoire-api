@@ -4,7 +4,7 @@ import { GoogleAiService } from '../search/google-ai.service.js';
 import 'multer';
 import type { IFileStorage } from '../storage/storage.interface.js';
 import { FILE_STORAGE_SERVICE } from '../storage/storage.module.js';
-import { StatutMemoire, TypeDiplome, Memoire } from '@prisma/client';
+import { StatutMemoire, TypeDiplome, Memoire } from '../generated/prisma/client.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');

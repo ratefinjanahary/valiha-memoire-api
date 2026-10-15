@@ -1,6 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
-import { TypeDiplome } from '@prisma/client';
+import { TypeDiplome } from '../../generated/prisma/client.js';
 
 /** '' ou null (champ vide d'un formulaire) → undefined */
 const emptyToUndefined = (v: unknown) => (v === '' || v === null ? undefined : v);

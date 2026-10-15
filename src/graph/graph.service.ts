@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { StatutMemoire } from '@prisma/client';
+import { StatutMemoire } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 export type GraphNodeType = 'universite' | 'domaine' | 'encadreur' | 'memoire';

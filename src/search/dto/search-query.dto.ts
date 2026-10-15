@@ -1,6 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
-import { TypeDiplome } from '@prisma/client';
+import { TypeDiplome } from '../../generated/prisma/client.js';
 
 const SearchQuerySchema = z.object({
   q: z.string().optional(),
