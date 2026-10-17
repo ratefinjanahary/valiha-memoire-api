@@ -8,6 +8,7 @@ import {
   Request,
   Get,
   Patch,
+  Delete,
   Param,
   Query,
   ParseUUIDPipe,
@@ -26,6 +27,13 @@ import { UpdateStatusDto } from './dto/update-status.dto.js';
 import { SearchMemoireDto } from './dto/search.memoire.dto.js';
 import { SimilaireQueryDto } from './dto/similaire.query.dto.js';
 import { PopulariteQueryDto } from './dto/popularite.query.dto.js';
+import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import {
+  updateMemoireSchema,
+  listModerationQuerySchema,
+  type UpdateMemoireInput,
+  type ListModerationQuery,
+} from './dto/memoire.validator.dto.js';
 
 @Controller('api')
 export class MemoireController {
@@ -61,6 +69,39 @@ export class MemoireController {
     @Request() req: any,
   ) {
     return this.memoireService.updateStatus(id, body.statut, body.motifRejet, req.user.id);
+  }
+
+  /* Liste de modération de tous les mémoires, filtrable par statut (?statut=REJETTE) */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCUMENTALISTE, Role.ADMIN)
+  @Get('moderation/memoires')
+  async getModerationList(
+    @Query(new ZodValidationPipe(listModerationQuerySchema)) query: ListModerationQuery,
+  ) {
+    return this.memoireService.getModerationList(query);
+  }
+
+  /* Modifier un mémoire non validé (BROUILLON, EN_ATTENTE_MODERATION, REJETTE) */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCUMENTALISTE, Role.ADMIN)
+  @Patch('moderation/memoires/:id')
+  async updateMemoire(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(updateMemoireSchema)) body: UpdateMemoireInput,
+    @Request() req: any,
+  ) {
+    return this.memoireService.updateMemoire(id, body, req.user.id);
+  }
+
+  /* Supprimer un mémoire non validé (+ son PDF) */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCUMENTALISTE, Role.ADMIN)
+  @Delete('moderation/memoires/:id')
+  async deleteMemoire(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+  ) {
+    return this.memoireService.deleteMemoire(id, req.user.id);
   }
 
   /* Recherche par mot-clé any|all existant */

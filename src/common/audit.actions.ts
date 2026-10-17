@@ -13,7 +13,9 @@ export const AuditAction = {
   REGISTER: 'REGISTER',
   UPDATE_ROLE: 'UPDATE_ROLE',
   DELETE_USER: 'DELETE_USER',
-  AUDIT_LOG_DELETED: 'AUDIT_LOG_DELETED'
+  AUDIT_LOG_DELETED: 'AUDIT_LOG_DELETED',
+  UPDATE_MEMOIRE: 'UPDATE_MEMOIRE',
+  DELETE_MEMOIRE: 'DELETE_MEMOIRE'
 } as const;
 
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
