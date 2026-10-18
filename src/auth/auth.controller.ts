@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, Request, Query, Param, Put, Delete } from '@nestjs/common';
+import { Controller, Post, Body, Get, Patch, UseGuards, Request, Query, Param, Put, Delete } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { RolesGuard } from './guards/roles.guard.js';
@@ -7,6 +7,8 @@ import { Role } from './role.enum.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { UpdateRoleDto } from './dto/update-role.dto.js';
+import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import { updateProfileSchema, UpdateProfileInput } from './dto/update-profile.dto.js';
 
 @Controller('api/auth')
 export class AuthController {
@@ -55,6 +57,15 @@ export class UsersController {
     @Request() req: any,
   ) {
     return this.authService.updateUserRole(id, body.role, req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('profile')
+  updateProfile(
+    @Request() req: any,
+    @Body(new ZodValidationPipe(updateProfileSchema)) body: UpdateProfileInput,
+  ) {
+    return this.authService.updateProfile(req.user.id, body);
   }
 
   @UseGuards(JwtAuthGuard)

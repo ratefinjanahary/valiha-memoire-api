@@ -1,10 +1,11 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service.js';
 import * as bcrypt from 'bcryptjs';
 import { Role } from './role.enum.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
+import { UpdateProfileInput } from './dto/update-profile.dto.js';
 import { AuditService } from '../audit/audit.service.js';
 import { AuditAction } from '../common/audit.actions.js';
 
@@ -161,6 +162,69 @@ export class AuthService {
       prenom: updatedUser.prenom,
       role: updatedUser.role,
     };
+  }
+
+  async updateProfile(userId: string, data: UpdateProfileInput) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActif) {
+      throw new UnauthorizedException('Compte introuvable ou inactif');
+    }
+
+    const updateData: {
+      nom?: string;
+      prenom?: string;
+      email?: string;
+      passwordHash?: string;
+    } = {};
+
+    if (data.nom && data.nom !== user.nom) updateData.nom = data.nom;
+    if (data.prenom && data.prenom !== user.prenom) updateData.prenom = data.prenom;
+
+    const emailChanged = !!data.email && data.email !== user.email;
+    const passwordChanged = !!data.newPassword;
+
+    // Re-vérification du mot de passe pour les changements sensibles
+    if (emailChanged || passwordChanged) {
+      const isValid =
+        !!data.currentPassword &&
+        (await bcrypt.compare(data.currentPassword, user.passwordHash));
+      if (!isValid) {
+        // 400 et non 401 : évite que l'intercepteur axios déconnecte l'utilisateur
+        throw new BadRequestException('Mot de passe actuel incorrect');
+      }
+    }
+
+    if (emailChanged) {
+      const emailTaken = await this.prisma.user.findUnique({
+        where: { email: data.email! },
+      });
+      if (emailTaken) throw new ConflictException('Cet email est déjà utilisé');
+      updateData.email = data.email!;
+    }
+
+    if (passwordChanged) {
+      updateData.passwordHash = await bcrypt.hash(data.newPassword!, 10);
+    }
+
+    // Rien n'a réellement changé
+    if (Object.keys(updateData).length === 0) {
+      return this.generateToken(user);
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+    });
+
+    const fields = Object.keys(updateData).map((k) => (k === 'passwordHash' ? 'password' : k));
+    this.auditService.log(
+      AuditAction.UPDATE_PROFILE,
+      userId,
+      `profile_updated_fields:${fields.join(',')}`,
+    );
+
+    // Nouveau token : le payload JWT contient l'email, qui a pu changer
+    return this.generateToken(updatedUser);
   }
 
   async deleteUser(id: string, requesterId: string, isAdmin: boolean) {
