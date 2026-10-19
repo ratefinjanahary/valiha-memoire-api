@@ -10,7 +10,7 @@ async function bootstrap(): Promise<void> {
     origin: [
       'http://localhost:3100',
       'http://localhost:3000',
-      'https://valiha-thesis.vercel.app/',
+      'https://valiha-thesis.vercel.app',
     ],
     credentials: true,
   });
