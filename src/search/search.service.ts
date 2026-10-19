@@ -13,40 +13,6 @@ export class SearchService {
     private aiService: GoogleAiService,
   ) {}
 
-  async search(query: SearchQueryDto) {
-    const { q, annee, universiteId, domaineId, typeDiplome } = query;
-
-    const where: any = {
-      statut: StatutMemoire.VALIDE,
-    };
-
-    if (q) {
-      where.OR = [
-        { titre: { contains: q, mode: 'insensitive' } },
-        { resume: { contains: q, mode: 'insensitive' } },
-        { auteurNom: { contains: q, mode: 'insensitive' } },
-        { auteurPrenom: { contains: q, mode: 'insensitive' } },
-      ];
-    }
-    
-    if (annee) where.anneeSoutenance = parseInt(annee, 10);
-    if (universiteId) where.universiteId = universiteId;
-    if (domaineId) where.domaineId = domaineId;
-    if (typeDiplome) where.typeDiplome = typeDiplome;
-
-    return this.prisma.memoire.findMany({
-      where,
-      include: {
-        universite: true,
-        domaine: true,
-        motsCles: { include: { motCle: true } },
-        encadreurs: { include: { encadreur: true } },
-      },
-      orderBy: { anneeSoutenance: 'desc' },
-      take: 50,
-    });
-  }
-
   async searchSemantic(queryText: string) {
     if (!queryText) return [];
 

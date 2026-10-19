@@ -51,15 +51,6 @@ export class MemoireController {
     return this.memoireService.submitMemoire(body, file, req.user.id);
   }
 
-  /* Mémoires en attente de modération existant */
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.DOCUMENTALISTE, Role.ADMIN)
-  @Get('moderation/pending')
-  async getPending(@Query('page') page?: string) {
-    const pageNumber = page ? parseInt(page, 10) : 1;
-    return this.memoireService.getPendingMemoires(pageNumber > 0 ? pageNumber : 1);
-  }
-
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.DOCUMENTALISTE, Role.ADMIN)
   @Patch('moderation/:id/status')

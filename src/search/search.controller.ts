@@ -8,11 +8,6 @@ import { SearchSemanticDto } from './dto/search-semantic.dto.js';
 export class SearchController {
   constructor(private readonly searchService: SearchService) {}
 
-  @Get('classic-search')
-  async search(@Query() query: SearchQueryDto) {
-    return this.searchService.search(query);
-  }
-
   @Post('search-semantic')
   async searchSemantic(@Body() body: SearchSemanticDto) {
     return this.searchService.searchSemantic(body.query);

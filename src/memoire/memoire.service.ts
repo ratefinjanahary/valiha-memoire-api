@@ -152,35 +152,6 @@ export class MemoireService {
     return memoire;
   }
 
-  async getPendingMemoires(page: number = 1) {
-    const limit = 10;
-    const skip = (page - 1) * limit;
-
-    const [total, data] = await Promise.all([
-      this.prisma.memoire.count({ where: { statut: StatutMemoire.EN_ATTENTE_MODERATION } }),
-      this.prisma.memoire.findMany({
-        where: { statut: StatutMemoire.EN_ATTENTE_MODERATION },
-        include: {
-          soumisPar: { select: { nom: true, prenom: true, email: true } },
-          universite: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-    ]);
-
-    return {
-      data,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
-
   /* updateStatus — branché sur l'audit */
   async updateStatus(id: string, statut: StatutMemoire, motifRejet?: string, moderateurId?: string) {
     const updated = await this.prisma.memoire.update({
