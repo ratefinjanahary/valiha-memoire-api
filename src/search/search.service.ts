@@ -32,6 +32,7 @@ export class SearchService {
       const results = await this.prisma.$queryRawUnsafe(`
         SELECT m.id, m.titre, m.resume, m."annee_soutenance" as "anneeSoutenance",
               m."auteur_nom" as "auteurNom", m."auteur_prenom" as "auteurPrenom",
+              m."type_diplome" as "typeDiplome",
               1 - (m.embedding <=> $1::vector) as similarity
         FROM memoires m
         WHERE m.statut = 'VALIDE'

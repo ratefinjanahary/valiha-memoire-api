@@ -5,6 +5,7 @@ import {
   UseInterceptors,
   UploadedFile,
   UseGuards,
+  Header,
   Request,
   Get,
   Patch,
@@ -61,6 +62,13 @@ export class MemoireController {
   ) {
     return this.memoireService.updateStatus(id, body.statut, body.motifRejet, req.user.id);
   }
+
+    @Get('memoires/:id/export-bibtex')
+    @Header('Content-Type', 'application/x-bibtex; charset=utf-8')
+    @Header('Content-Disposition', 'attachment; filename="memoire.bib"')
+    async exportBibtex(@Param('id', ParseUUIDPipe) id: string) {
+      return this.memoireService.exportBibtex(id);
+    }
 
   /* Liste de modération de tous les mémoires, filtrable par statut (?statut=REJETTE) */
   @UseGuards(JwtAuthGuard, RolesGuard)

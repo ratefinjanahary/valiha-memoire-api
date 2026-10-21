@@ -18,6 +18,7 @@ import { SearchMemoireDto } from './dto/search.memoire.dto.js';
 import { SimilaireQueryDto } from './dto/similaire.query.dto.js';
 import { PopulariteQueryDto } from './dto/popularite.query.dto.js';
 import { AuditService } from '../audit/audit.service.js';
+import { buildBibtex } from '../common/bibtex.util.js';
 import { AuditAction } from '../common/audit.actions.js';
 import { jaccardSimilarity } from '../common/jaccard.util.js';
 import type { UpdateMemoireInput, ListModerationQuery } from './dto/memoire.validator.dto.js';
@@ -174,6 +175,25 @@ export class MemoireService {
     }
 
     return updated;
+  }
+
+  /* Export BibTeX d'un mémoire VALIDE */
+  async exportBibtex(id: string) {
+    const memoire = await this.prisma.memoire.findFirst({
+      where: { id, statut: StatutMemoire.VALIDE },
+      include: {
+        universite: { select: { nom: true } },
+        domaine: { select: { nom: true } },
+        motsCles: { include: { motCle: { select: { libelle: true } } } },
+        encadreurs: { include: { encadreur: true } },
+      },
+    });
+
+    if (!memoire) {
+      throw new NotFoundException('Mémoire introuvable ou non validé');
+    }
+
+    return buildBibtex(memoire);
   }
 
   /* Liste de modération : tous les statuts (ou un seul via ?statut=) */

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { Universite } from '../generated/prisma/client.js';
+import { Universite, Prisma } from '../generated/prisma/client.js';
 
 @Injectable()
 export class AnalyticsService {
@@ -67,35 +67,28 @@ export class AnalyticsService {
 
   async getConsultationsStats(query: { annee?: number; mois?: number }) {
     const { annee, mois } = query;
-    const where: any = {};
+    const where: Prisma.ConsultationWhereInput = {};
 
     if (annee || mois) {
-      const year = annee || new Date().getFullYear();
-      let startDate: Date;
-      let endDate: Date;
+      const year = annee ?? new Date().getUTCFullYear();
 
-      if (mois) {
-        // Filtrer sur un mois précis d'une année donnée (les mois sont de 0 à 11 en JS)
-        startDate = new Date(year, mois - 1, 1, 0, 0, 0, 0);
-        endDate = new Date(year, mois, 0, 23, 59, 59, 999);
-      } else {
-        // Filtrer sur toute l'année
-        startDate = new Date(year, 0, 1, 0, 0, 0, 0);
-        endDate = new Date(year, 11, 31, 23, 59, 59, 999);
-      }
+      const startDate = mois
+        ? new Date(Date.UTC(year, mois - 1, 1))
+        : new Date(Date.UTC(year, 0, 1));
 
-      where.consultedAt = {
-        gte: startDate,
-        lte: endDate,
-      };
+      const endDate = mois
+        ? new Date(Date.UTC(year, mois, 1))
+        : new Date(Date.UTC(year + 1, 0, 1));
+
+      where.consultedAt = { gte: startDate, lt: endDate };
     }
 
-    const count = await this.prisma.consultation.count({ where });
+    const totalConsultations = await this.prisma.consultation.count({ where });
 
     return {
-      annee: annee || null,
-      mois: mois || null,
-      totalConsultations: count,
+      annee: annee ?? null,
+      mois: mois ?? null,
+      totalConsultations,
     };
   }
 }

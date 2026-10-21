@@ -32,7 +32,7 @@ export class MotCleService {
         memoire: { statut: StatutMemoire.VALIDE },
       },
       _count: { motCleId: true },
-      orderBy: { _count: { motCleId: 'desc' } },
+      orderBy: [{ _count: { motCleId: 'desc' } }, { motCleId: 'asc' }],
       take: limit,
     });
 
