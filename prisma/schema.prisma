@@ -3,7 +3,6 @@ datasource db {
   // url        = env("DATABASE_URL")
   extensions = [pgvector(map: "vector")]
 }
-
 generator client {
   provider        = "prisma-client"
   output   = "../src/generated/prisma"
@@ -88,10 +87,19 @@ model Encadreur {
 model MotCle {
   id        String   @id @default(uuid())
   libelle   String   @unique
+
+  /// URI canonique du descripteur UNESCO (ex. http://vocabularies.unesco.org/thesaurus/concept1234).
+  /// NULL = mot-clé libre. @unique : Postgres autorise plusieurs NULL, mais un seul enregistrement par descripteur.
+  unescoUri String?  @unique @map("unesco_uri")
+
+  /// true = libellé issu du Thésaurus UNESCO ; false = mot-clé libre (non trouvé ou API indisponible)
+  isUnesco  Boolean  @default(false) @map("is_unesco")
+
   createdAt DateTime @default(now()) @map("created_at")
 
   memoires MemoireMotCle[]
 
+  @@index([isUnesco])
   @@map("mots_cles")
 }
 

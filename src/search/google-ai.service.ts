@@ -42,7 +42,11 @@ export class GoogleAiService {
         contents: `Titre : ${titre}\nRésumé : ${resume}`,
         config: {
           systemInstruction:
-            "Extrais 5 à 8 mots-clés académiques de ce mémoire, en français, en minuscules, 1 à 3 mots chacun, sans doublons. Réponds uniquement avec un tableau JSON de chaînes.",
+            "Propose 10 mots-clés candidats pour ce mémoire, en français, en minuscules, sans doublons. " +
+            "D'abord 6 termes génériques de discipline ou de grand thème, formulés comme dans un thésaurus " +
+            "(1 à 3 mots, ex. « biologie », « astronomie », « protection de l'environnement », « enseignement supérieur »), " +
+            "puis 4 termes précis spécifiques au sujet (1 à 3 mots). " +
+            "Réponds uniquement avec un tableau JSON de chaînes.",
           responseMimeType: 'application/json',
           responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } },
           temperature: 0.2,

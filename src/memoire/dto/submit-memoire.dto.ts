@@ -1,37 +1,19 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { TypeDiplome } from '../../generated/prisma/client.js';
+import { motsClesSchema, toStringArray } from './mots-cles.dto';
 
 /** '' ou null (champ vide d'un formulaire) → undefined */
 const emptyToUndefined = (v: unknown) => (v === '' || v === null ? undefined : v);
 
-/**
- * La soumission est en multipart/form-data : une liste arrive soit en champ répété
- * (encadreurIds=a&encadreurIds=b → array), soit en string unique, soit en JSON / CSV.
- */
-const toStringArray = (v: unknown) => {
-  if (Array.isArray(v)) return v;
-  if (typeof v !== 'string') return v;
-  const s = v.trim();
-  if (!s) return [];
-  if (s.startsWith('[')) {
-    try {
-      return JSON.parse(s);
-    } catch {
-      return v;
-    }
-  }
-  return s.split(',').map((x) => x.trim()).filter(Boolean);
-};
-
-const SubmitMemoireSchema = z.object({
+export const SubmitMemoireSchema = z.object({
   titre: z.string().min(5, { message: 'Le titre doit contenir au moins 5 caractères' }),
   resume: z.string().optional(),
   anneeSoutenance: z.string().regex(/^\d{4}$/, { message: "L'année doit être valide" }),
   typeDiplome: z.enum(TypeDiplome),
-  auteurNom: z.string().min(2, { message: 'Le nom de l\'auteur est requis' }),
-  auteurPrenom: z.string().min(2, { message: 'Le prénom de l\'auteur est requis' }),
-  auteurEmail: z.email({ message: 'Email de l\'auteur invalide' }),
+  auteurNom: z.string().min(2, { message: "Le nom de l'auteur est requis" }),
+  auteurPrenom: z.string().min(2, { message: "Le prénom de l'auteur est requis" }),
+  auteurEmail: z.email({ message: "Email de l'auteur invalide" }),
   universiteId: z.uuid({ message: 'ID université invalide' }),
   domaineId: z.uuid({ message: 'ID domaine invalide' }),
 
@@ -48,9 +30,9 @@ const SubmitMemoireSchema = z.object({
   auteurEncadreurId: z
     .preprocess(emptyToUndefined, z.uuid({ message: 'ID encadreur auteur invalide' }).optional())
     .optional(),
-  motsCles: z.preprocess(toStringArray,
-    z.array(z.string().trim().min(2).max(50)).max(10),
-  ).optional(),
+
+  // Optionnel : absent ou vide → extraction IA ; sinon chaque mot est ensuite mappé vers un descripteur UNESCO
+  motsCles: motsClesSchema.optional(),
 });
 
 export class SubmitMemoireDto extends createZodDto(SubmitMemoireSchema) {}
