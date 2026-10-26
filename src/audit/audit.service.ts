@@ -54,9 +54,7 @@ export class AuditService {
     };
   }
 
-  /** Supprime une entrée du journal. La suppression elle-même est tracée. */
   async remove(id: string, actorId?: string) {
-    // deleteMany plutôt que delete : pas d'exception P2025, on gère le 404 nous-mêmes
     const { count } = await this.prisma.auditLog.deleteMany({ where: { id } });
     if (count === 0) {
       throw new NotFoundException("Entrée du journal d'audit introuvable");
@@ -66,7 +64,6 @@ export class AuditService {
     return { deleted: count };
   }
 
-  /** Supprime plusieurs entrées d'un coup (sélection du tableau). */
   async removeMany(ids: string[], actorId?: string) {
     const { count } = await this.prisma.auditLog.deleteMany({
       where: { id: { in: ids } },

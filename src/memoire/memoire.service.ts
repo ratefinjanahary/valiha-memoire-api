@@ -15,12 +15,9 @@ import { StatutMemoire, TypeDiplome, Memoire, Prisma } from '../generated/prisma
 const pdfParse = require('pdf-parse');
 import { SubmitMemoireDto } from './dto/submit-memoire.dto.js';
 import { SearchMemoireDto } from './dto/search.memoire.dto.js';
-import { SimilaireQueryDto } from './dto/similaire.query.dto.js';
 import { PopulariteQueryDto } from './dto/popularite.query.dto.js';
 import { AuditService } from '../audit/audit.service.js';
-import { buildBibtex } from '../common/bibtex.util.js';
 import { AuditAction } from '../common/audit.actions.js';
-import { jaccardSimilarity } from '../common/jaccard.util.js';
 import type { UpdateMemoireInput, ListModerationQuery } from './dto/memoire.validator.dto.js';
 import { MotCleUnescoService } from '../unesco/mot-cle-unesco.service.js';
 import { AUTO_KEYWORDS_SELECTION } from '../unesco/mot-cle-unesco.service.js';
@@ -100,7 +97,7 @@ export class MemoireService {
     let resume = data.resume || '';
     let motsCles: string[] = [];
 
-    // 1) Création du mémoire en BD. Si quelque chose plante, on supprime le PDF de Drive.
+    /* 1 - Création du mémoire en BD. Si quelque chose plante, on supprime le PDF de Drive. */
     try {
       if (!resume) {
         try {
@@ -116,13 +113,13 @@ export class MemoireService {
       const motsClesBruts = this.normaliserMotsCles(
         saisis ? data.motsCles! : await this.aiService.extractKeywords(data.titre, resume),
       );
-      // UNESCO → upsert MotCle (mode dégradé automatique : ne lance pas d'erreur si l'API est KO)
+      // Unesco → upsert MotCle (mode dégradé automatique : ne lance pas d'erreur si l'API est KO)
       // Si les mots-clés sont auto-extraits, on applique la sélection AUTO_KEYWORDS_SELECTION
       const assoc = await this.motCleUnescoService.resolveAndUpsert(
         motsClesBruts,
         saisis ? undefined : AUTO_KEYWORDS_SELECTION,
       );
-      motsCles = assoc.libelles; // libellés officiels, réutilisés pour l'embedding
+      motsCles = assoc.libelles;
 
       memoire = await this.prisma.memoire.create({
         data: {
@@ -154,7 +151,7 @@ export class MemoireService {
       throw error;
     }
 
-    // 2) Embedding : non bloquant, un échec est juste loggé (le mémoire existe déjà)
+    /* 2 - Embedding : non bloquant, un échec est juste loggé (le mémoire existe déjà) */
     await this.refreshEmbedding(memoire.id, data.titre, resume, motsCles);
 
     this.auditService.log(AuditAction.SUBMIT_MEMOIRE, userId, `memoireId:${memoire.id}`);
@@ -186,26 +183,6 @@ export class MemoireService {
     return updated;
   }
 
-  /* Export BibTeX d'un mémoire VALIDE */
-  async exportBibtex(id: string) {
-    const memoire = await this.prisma.memoire.findFirst({
-      where: { id, statut: StatutMemoire.VALIDE },
-      include: {
-        universite: { select: { nom: true } },
-        domaine: { select: { nom: true } },
-        motsCles: { include: { motCle: { select: { libelle: true } } } },
-        encadreurs: { include: { encadreur: true } },
-      },
-    });
-
-    if (!memoire) {
-      throw new NotFoundException('Mémoire introuvable ou non validé');
-    }
-
-    return buildBibtex(memoire);
-  }
-
-  /* Liste de modération : tous les statuts (ou un seul via ?statut=) */
   async getModerationList(query: ListModerationQuery) {
     const { statut, page, limit } = query;
     const where: Prisma.MemoireWhereInput = statut ? { statut } : {};
@@ -331,7 +308,6 @@ export class MemoireService {
     return updated;
   }
 
-  /* Suppression d'un mémoire non validé (BD en cascade + PDF du stockage) */
   async deleteMemoire(id: string, userId?: string) {
     const existing = await this.prisma.memoire.findUnique({
       where: { id },
@@ -352,7 +328,8 @@ export class MemoireService {
       throw e;
     }
 
-    // BD d'abord, fichier ensuite : en cas d'échec on a au pire un PDF orphelin (loggé), jamais une fiche sans PDF
+    // BD d'abord, fichier ensuite : en cas d'échec on a au pire un PDF orphelin (loggé), 
+    // Jamais une fiche sans PDF
     try {
       await this.fileStorage.deleteFile(existing.pdfUrl);
     } catch (e) {
@@ -427,72 +404,8 @@ export class MemoireService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async getSimilaires(id: string, dto: SimilaireQueryDto) {
-    const safeLimit = Math.min(dto.limit, 20);
-
-    const target = await this.prisma.memoire.findUnique({
-      where: { id, statut: StatutMemoire.VALIDE },
-      select: { id: true },
-    });
-
-    if (!target) {
-      throw new NotFoundException(`Mémoire ${id} introuvable ou non validé`);
-    }
-
-    // Récupérer les mots-clés de TOUS les mémoires VALIDE via $queryRaw (tagged template)
-    const rows = await this.prisma.$queryRaw<Array<{ memoire_id: string; mot_cle_id: string }>>`
-      SELECT mmc.memoire_id, mmc.mot_cle_id
-      FROM memoire_mots_cles mmc
-      INNER JOIN memoires m ON m.id = mmc.memoire_id
-      WHERE m.statut = 'VALIDE'
-    `;
-
-    if (rows.length === 0) return [];
-
-    // Construire la map memoireId → Set<motCleId>
-    const motClesParMemoire = new Map<string, Set<string>>();
-    for (const row of rows) {
-      if (!motClesParMemoire.has(row.memoire_id)) {
-        motClesParMemoire.set(row.memoire_id, new Set());
-      }
-      motClesParMemoire.get(row.memoire_id)!.add(row.mot_cle_id);
-    }
-
-    const setTarget = motClesParMemoire.get(id) ?? new Set<string>();
-
-    if (setTarget.size === 0) return [];
-
-    /* Calculer Jaccard pour chaque autre mémoire VALIDE */
-    const scores: Array<{ memoireId: string; score: number }> = [];
-    for (const [memoireId, setB] of motClesParMemoire.entries()) {
-      if (memoireId === id) continue;
-      const score = jaccardSimilarity(setTarget, setB);
-      if (score > 0) scores.push({ memoireId, score });
-    }
-
-    // Trier par score décroissant, prendre les N premiers
-    scores.sort((a, b) => b.score - a.score);
-    const topIds = scores.slice(0, safeLimit).map((s) => s.memoireId);
-
-    if (topIds.length === 0) return [];
-
-    const memoires = await this.prisma.memoire.findMany({
-      where: { id: { in: topIds } },
-      include: {
-        universite: { select: { nom: true, sigle: true } },
-        domaine: { select: { nom: true } },
-        motsCles: { include: { motCle: { select: { id: true, libelle: true, unescoUri: true, isUnesco: true } } } }
-      },
-    });
-
-    // Ré-attacher le score Jaccard et retourner dans l'ordre
-    const scoreMap = new Map(scores.map((s) => [s.memoireId, s.score]));
-    return memoires
-      .map((m) => ({ ...m, jaccardScore: scoreMap.get(m.id) ?? 0 }))
-      .sort((a, b) => b.jaccardScore - a.jaccardScore);
-  }
-
   /* Récupérer un mémoire individuel et enregistrer sa consultation */
+
   async getMemoireWithConsultation(id: string, ipAddress: string, userAgent: string) {
     const memoire = await this.prisma.memoire.findUnique({
       where: { id },
@@ -509,13 +422,17 @@ export class MemoireService {
     }
 
     if (memoire.statut === StatutMemoire.VALIDE) {
-      await this.prisma.consultation.create({
-        data: {
-          memoireId: id,
-          ipAddress,
-          userAgent,
-        },
-      });
+      try {
+        await this.prisma.consultation.create({
+          data: {
+            memoireId: id,
+            ipAddress: ipAddress.slice(0, 45),
+            userAgent: userAgent.slice(0, 255),
+          },
+        });
+      } catch (e) {
+        this.logger.error(`Échec enregistrement consultation (mémoire ${id})`, e instanceof Error ? e.stack : e);
+      }
     }
 
     return memoire;

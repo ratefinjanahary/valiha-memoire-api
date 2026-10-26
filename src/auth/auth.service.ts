@@ -28,7 +28,6 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    // Par défaut, l'utilisateur est PUBLIC ou ETUDIANT
     const roleToAssign = data.role === Role.ETUDIANT ? Role.ETUDIANT : Role.PUBLIC;
 
     const user = await this.prisma.user.create({
@@ -80,20 +79,6 @@ export class AuthService {
         role: user.role,
       },
     };
-  }
-
-  async getAllUsers() {
-    return this.prisma.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        nom: true,
-        prenom: true,
-        role: true,
-        isActif: true,
-        createdAt: true,
-      },
-    });
   }
 
   async getUsers(page: number = 1, limit: number = 10, search?: string) {

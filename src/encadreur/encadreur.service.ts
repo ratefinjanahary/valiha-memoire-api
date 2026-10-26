@@ -31,7 +31,7 @@ export class EncadreurService {
   }
 
   /**
-   * Liste paginée + recherche, pensée pour un ComboBox.
+   * Liste paginée + recherche.
    * Chaque mot de `q` doit matcher nom, prénom ou titre ("rakoto jean" trouve Jean Rakoto).
    * L'email n'est volontairement pas renvoyé.
    */

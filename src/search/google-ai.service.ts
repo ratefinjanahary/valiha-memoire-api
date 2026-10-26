@@ -15,7 +15,10 @@ export class GoogleAiService {
     this.ai = new GoogleGenAI({ apiKey: apiKey || 'dummy-key' });
   }
 
-  async generateEmbedding(text: string, taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' = 'RETRIEVAL_QUERY'): Promise<number[]> {
+  async generateEmbedding(
+    text: string, 
+    taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' = 'RETRIEVAL_QUERY'
+  ): Promise<number[]> {
     try {
       this.logger.debug(`Generating embedding for text (${text.length} chars)...`);
       const response = await this.ai.models.embedContent({
@@ -25,6 +28,7 @@ export class GoogleAiService {
       });
       const values = response.embeddings?.[0]?.values || [];
       this.logger.debug(`Embedding generated successfully: ${values.length} dimensions`);
+
       return values;
     } catch (error: any) {
       this.logger.error(

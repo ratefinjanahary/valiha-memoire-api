@@ -26,7 +26,6 @@ import { Role } from '../auth/role.enum.js';
 import { SubmitMemoireDto } from './dto/submit-memoire.dto.js';
 import { UpdateStatusDto } from './dto/update-status.dto.js';
 import { SearchMemoireDto } from './dto/search.memoire.dto.js';
-import { SimilaireQueryDto } from './dto/similaire.query.dto.js';
 import { PopulariteQueryDto } from './dto/popularite.query.dto.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import {
@@ -62,13 +61,6 @@ export class MemoireController {
   ) {
     return this.memoireService.updateStatus(id, body.statut, body.motifRejet, req.user.id);
   }
-
-    @Get('memoires/:id/export-bibtex')
-    @Header('Content-Type', 'application/x-bibtex; charset=utf-8')
-    @Header('Content-Disposition', 'attachment; filename="memoire.bib"')
-    async exportBibtex(@Param('id', ParseUUIDPipe) id: string) {
-      return this.memoireService.exportBibtex(id);
-    }
 
   /* Liste de modération de tous les mémoires, filtrable par statut (?statut=REJETTE) */
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -116,14 +108,6 @@ export class MemoireController {
   @Get('memoires/top')
   async getTop(@Query() query: PopulariteQueryDto) {
     return this.memoireService.getTopMemoires(query);
-  }
-
-  @Get('memoires/:id/similaires')
-  async getSimilaires(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Query() query: SimilaireQueryDto,
-  ) {
-    return this.memoireService.getSimilaires(id, query);
   }
 
   @Get('memoires/:id/popularite')

@@ -17,18 +17,16 @@ export class SearchService {
     if (!queryText) return [];
 
     try {
-      // 1. Générer l'embedding de la requête
       this.logger.log(`Semantic search for: "${queryText}"`);
       const embedding = await this.aiService.generateEmbedding(queryText);
       if (!embedding.length) {
         throw new InternalServerErrorException("L'embedding n'a pas pu être généré.");
       }
 
-      // Convertir l'array TS en string au format vector(3072) pour pgvector: '[0.1, 0.2, ...]'
       const embeddingString = `[${embedding.join(',')}]`;
       const minSimilarity = Number(process.env.SEMANTIC_MIN_SIMILARITY ?? 0.6);
 
-      // 2. Effectuer la recherche par similarité (Cosinus : 1 - (A <=> B))
+      // Recherche par similarité (Cosinus : 1 - (A <=> B))
       const results = await this.prisma.$queryRawUnsafe(`
         SELECT m.id, m.titre, m.resume, m."annee_soutenance" as "anneeSoutenance",
               m."auteur_nom" as "auteurNom", m."auteur_prenom" as "auteurPrenom",
@@ -43,6 +41,7 @@ export class SearchService {
       `, embeddingString, 1 - minSimilarity);
 
       this.logger.log(`Semantic search returned ${(results as any[]).length} results`);
+
       return results;
     } catch (error: any) {
       this.logger.error(`Semantic search failed: ${error?.message}`, error?.stack);
