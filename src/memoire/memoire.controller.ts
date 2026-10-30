@@ -44,7 +44,7 @@ export class MemoireController {
   @Post('memoires/submit')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_PDF_SIZE } }))
   async submitMemoire(
-    @UploadedFile(pdfParseFilePipe()) file: Express.Multer.File,
+    @UploadedFile(pdfParseFilePipe(false)) file: Express.Multer.File | undefined,
     @Body() body: SubmitMemoireDto,
     @Request() req: any,
   ) {

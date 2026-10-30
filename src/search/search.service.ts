@@ -48,27 +48,4 @@ export class SearchService {
       throw new InternalServerErrorException(error?.message || 'Semantic search failed');
     }
   }
-
-  async exportBibtex(id: string) {
-    const memoire = await this.prisma.memoire.findUnique({
-      where: { id, statut: StatutMemoire.VALIDE },
-      include: { universite: true },
-    });
-
-    if (!memoire) {
-      throw new Error('Mémoire introuvable ou non validé');
-    }
-
-    const annee = memoire.anneeSoutenance;
-    const author = `${memoire.auteurNom}, ${memoire.auteurPrenom}`;
-    const key = `${memoire.auteurNom}${annee}`;
-    
-    return `@mastersthesis{${key},
-      author  = {${author}},
-      title   = {${memoire.titre}},
-      school  = {${memoire.universite.nom}},
-      year    = {${annee}},
-      type    = {${memoire.typeDiplome}}
-    }`;
-  }
 }

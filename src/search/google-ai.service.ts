@@ -31,11 +31,12 @@ export class GoogleAiService {
 
       return values;
     } catch (error: any) {
+      const cause = error?.cause;
       this.logger.error(
-        `Failed to generate embedding: ${error?.message || error}`,
+        `Failed to generate embedding: ${error?.message} | cause: ${cause?.code ?? ''} ${cause?.message ?? ''}`,
         error?.stack,
       );
-      throw new Error(`Erreur lors de la génération de l'embedding: ${error?.message}`);
+      throw new Error(`Erreur lors de la génération de l'embedding: ${error?.message} (${cause?.code ?? 'no code'})`);
     }
   }
 

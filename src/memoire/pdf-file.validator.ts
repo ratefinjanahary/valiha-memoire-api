@@ -22,9 +22,9 @@ export class PdfFileValidator extends FileValidator<Record<string, never>> {
   }
 }
 
-export const pdfParseFilePipe = () =>
+export const pdfParseFilePipe = (fileIsRequired = true) =>
   new ParseFilePipe({
-    fileIsRequired: true,
+    fileIsRequired,
     validators: [
       new MaxFileSizeValidator({
         maxSize: MAX_PDF_SIZE,

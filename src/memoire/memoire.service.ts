@@ -12,7 +12,7 @@ import 'multer';
 import type { IFileStorage } from '../storage/storage.interface.js';
 import { FILE_STORAGE_SERVICE } from '../storage/storage.module.js';
 import { StatutMemoire, TypeDiplome, Memoire, Prisma } from '../generated/prisma/client.js';
-const pdfParse = require('pdf-parse');
+import { PDFParse } from 'pdf-parse';
 import { SubmitMemoireDto } from './dto/submit-memoire.dto.js';
 import { SearchMemoireDto } from './dto/search.memoire.dto.js';
 import { PopulariteQueryDto } from './dto/popularite.query.dto.js';
@@ -62,13 +62,6 @@ export class MemoireService {
     )].slice(0, 10);
   }
 
-  /** Un mémoire VALIDE est public : il ne peut plus être modifié ni supprimé depuis ce flux. */
-  private assertModifiable(statut: StatutMemoire, verbe: 'modifié' | 'supprimé') {
-    if (statut === StatutMemoire.VALIDE) {
-      throw new ConflictException(`Un mémoire validé ne peut pas être ${verbe}`);
-    }
-  }
-
   /** Génère et stocke l'embedding. Non bloquant : un échec est juste loggé. */
   private async refreshEmbedding(memoireId: string, titre: string, resume: string, motsCles: string[]) {
     try {
@@ -87,23 +80,33 @@ export class MemoireService {
     }
   }
 
-  async submitMemoire(data: SubmitMemoireDto, file: Express.Multer.File, userId: string) {
+  async submitMemoire(data: SubmitMemoireDto, file: Express.Multer.File | undefined, userId: string) {
+    const resumeSaisi = data.resume?.trim();
+    if (!file && !resumeSaisi) {
+      throw new BadRequestException("Le résumé est obligatoire lorsqu'aucun PDF n'est fourni");
+    }
+
     const encadreurIds = [...new Set(data.encadreurIds)];
     await this.assertEncadreursValides(encadreurIds, data.auteurEncadreurId);
 
-    const pdfUrl = await this.fileStorage.uploadFile(file, 'memoires');
+    const pdfUrl = file ? await this.fileStorage.uploadFile(file, 'memoires') : null;
 
     let memoire: Memoire;
-    let resume = data.resume || '';
+    let resume = resumeSaisi ?? '';
     let motsCles: string[] = [];
 
     /* 1 - Création du mémoire en BD. Si quelque chose plante, on supprime le PDF de Drive. */
     try {
-      if (!resume) {
+      if (!resume && file) {
         try {
-          const pdfData = await pdfParse(file.buffer);
-          const text: string = pdfData.text.trim();
-          resume = text.length > 1000 ? text.substring(0, 1000) + '...' : text;
+          const parser = new PDFParse({ data: file.buffer });
+          try {
+            const { text } = await parser.getText();
+            const t = text.trim();
+            resume = t.length > 1000 ? t.substring(0, 1000) + '...' : t;
+          } finally {
+            await parser.destroy();
+          }
         } catch (error) {
           this.logger.error('Failed to parse PDF', error);
         }
@@ -113,8 +116,6 @@ export class MemoireService {
       const motsClesBruts = this.normaliserMotsCles(
         saisis ? data.motsCles! : await this.aiService.extractKeywords(data.titre, resume),
       );
-      // Unesco → upsert MotCle (mode dégradé automatique : ne lance pas d'erreur si l'API est KO)
-      // Si les mots-clés sont auto-extraits, on applique la sélection AUTO_KEYWORDS_SELECTION
       const assoc = await this.motCleUnescoService.resolveAndUpsert(
         motsClesBruts,
         saisis ? undefined : AUTO_KEYWORDS_SELECTION,
@@ -124,12 +125,12 @@ export class MemoireService {
       memoire = await this.prisma.memoire.create({
         data: {
           titre: data.titre,
-          resume: resume,
+          resume,
           anneeSoutenance: parseInt(data.anneeSoutenance, 10),
           typeDiplome: data.typeDiplome as TypeDiplome,
           statut: StatutMemoire.EN_ATTENTE_MODERATION,
-          pdfUrl: pdfUrl,
-          tailleFichier: file.size,
+          pdfUrl,
+          tailleFichier: file?.size ?? null,
           auteurNom: data.auteurNom,
           auteurPrenom: data.auteurPrenom,
           auteurEmail: data.auteurEmail,
@@ -141,17 +142,17 @@ export class MemoireService {
             create: encadreurIds.map((encadreurId) => ({ encadreurId })),
           },
           motsCles: {
-            create: assoc.motCleIds.map((motCleId: any) => ({ motCleId })),   // pivot MemoireMotCle
+            create: assoc.motCleIds.map((motCleId: any) => ({ motCleId })),
           },
         },
       });
     } catch (error) {
-      // Rollback : on ne laisse pas de PDF orphelin sur Drive
-      await this.fileStorage.deleteFile(pdfUrl);
+      // Rollback : pas de PDF orphelin sur Drive
+      if (pdfUrl) await this.fileStorage.deleteFile(pdfUrl);
       throw error;
     }
 
-    /* 2 - Embedding : non bloquant, un échec est juste loggé (le mémoire existe déjà) */
+    /* 2 - Embedding : non bloquant */
     await this.refreshEmbedding(memoire.id, data.titre, resume, motsCles);
 
     this.auditService.log(AuditAction.SUBMIT_MEMOIRE, userId, `memoireId:${memoire.id}`);
@@ -223,7 +224,6 @@ export class MemoireService {
     });
 
     if (!existing) throw new NotFoundException('Mémoire introuvable');
-    this.assertModifiable(existing.statut, 'modifié');
 
     // Références (FK) : on renvoie un 400 propre plutôt qu'une erreur Prisma P2003
     if (dto.universiteId) {
@@ -283,19 +283,10 @@ export class MemoireService {
       };
     }
 
-    let updated: Memoire;
-    try {
-      updated = await this.prisma.memoire.update({
-        // le filtre sur le statut protège d'une validation concurrente
-        where: { id, statut: { not: StatutMemoire.VALIDE } },
-        data,
-      });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
-        throw new ConflictException('Ce mémoire vient d\'être validé et ne peut plus être modifié');
-      }
-      throw e;
-    }
+    const updated = await this.prisma.memoire.update({
+      where: { id },
+      data,
+    });
 
     // Le texte embarqué dépend du titre, du résumé et des mots-clés
     if (dto.titre !== undefined || dto.resume !== undefined || motsCles) {
@@ -315,27 +306,18 @@ export class MemoireService {
     });
 
     if (!existing) throw new NotFoundException('Mémoire introuvable');
-    this.assertModifiable(existing.statut, 'supprimé');
+    await this.prisma.memoire.delete({ where: { id } });
 
-    try {
-      await this.prisma.memoire.delete({
-        where: { id, statut: { not: StatutMemoire.VALIDE } },
-      });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
-        throw new ConflictException('Ce mémoire vient d\'être validé et ne peut plus être supprimé');
+    // BD d'abord, fichier ensuite : en cas d'échec on a au pire un PDF orphelin (loggé),
+    // jamais une fiche sans PDF
+    const { pdfUrl } = existing;
+    if (pdfUrl) {
+      try {
+        await this.fileStorage.deleteFile(pdfUrl);
+      } catch (e) {
+        this.logger.warn(`PDF non supprimé pour le mémoire ${id} (${pdfUrl})`, e);
       }
-      throw e;
     }
-
-    // BD d'abord, fichier ensuite : en cas d'échec on a au pire un PDF orphelin (loggé), 
-    // Jamais une fiche sans PDF
-    try {
-      await this.fileStorage.deleteFile(existing.pdfUrl);
-    } catch (e) {
-      this.logger.warn(`PDF non supprimé pour le mémoire ${id} (${existing.pdfUrl})`, e);
-    }
-
     this.auditService.log(AuditAction.DELETE_MEMOIRE, userId, `memoireId:${id}`);
 
     return { id, deleted: true };
@@ -395,7 +377,7 @@ export class MemoireService {
             },
           },
         },
-        orderBy: { anneeSoutenance: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
