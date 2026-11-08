@@ -48,6 +48,9 @@ web_modules/
 # uploads directory
 uploads/
 
+# Prisma migrations (ne pas versionner)
+prisma/migrations/
+
 # Tests direcotories
 test/
 
