@@ -3,8 +3,7 @@ import {
   Inject,
   Logger,
   NotFoundException,
-  BadRequestException,
-  ConflictException,
+  BadRequestException
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { GoogleAiService } from '../search/google-ai.service.js';
@@ -19,8 +18,8 @@ import { PopulariteQueryDto } from './dto/popularite.query.dto.js';
 import { AuditService } from '../audit/audit.service.js';
 import { AuditAction } from '../common/audit.actions.js';
 import type { UpdateMemoireInput, ListModerationQuery } from './dto/memoire.validator.dto.js';
-import { MotCleUnescoService } from '../unesco/mot-cle-unesco.service.js';
-import { AUTO_KEYWORDS_SELECTION } from '../unesco/mot-cle-unesco.service.js';
+import { ThesaurusKeywordService } from '../thesaurus/thesaurus-keyword.service.js';
+import { AutoKeywordsService } from './auto-keywords.service.js';
 
 @Injectable()
 export class MemoireService {
@@ -31,7 +30,8 @@ export class MemoireService {
     private aiService: GoogleAiService,
     @Inject(FILE_STORAGE_SERVICE) private fileStorage: IFileStorage,
     private readonly auditService: AuditService,
-    private readonly motCleUnescoService: MotCleUnescoService,
+    private readonly thesaurusKeywords: ThesaurusKeywordService,
+    private readonly autoKeywords: AutoKeywordsService,
   ) {}
 
   /**
@@ -113,13 +113,9 @@ export class MemoireService {
       }
 
       const saisis = !!data.motsCles?.length;
-      const motsClesBruts = this.normaliserMotsCles(
-        saisis ? data.motsCles! : await this.aiService.extractKeywords(data.titre, resume),
-      );
-      const assoc = await this.motCleUnescoService.resolveAndUpsert(
-        motsClesBruts,
-        saisis ? undefined : AUTO_KEYWORDS_SELECTION,
-      );
+      const assoc = saisis
+        ? await this.thesaurusKeywords.resolveAndUpsert(this.normaliserMotsCles(data.motsCles!), { domaineId: data.domaineId })
+        : await this.autoKeywords.generateAndUpsert(data.titre, resume, data.domaineId); // `resume` = résumé final (saisi ou extrait du PDF)
       motsCles = assoc.libelles;
 
       memoire = await this.prisma.memoire.create({
@@ -142,7 +138,7 @@ export class MemoireService {
             create: encadreurIds.map((encadreurId) => ({ encadreurId })),
           },
           motsCles: {
-            create: assoc.motCleIds.map((motCleId: any) => ({ motCleId })),
+            create: assoc.motCleIds.map((motCleId) => ({ motCleId })),
           },
         },
       });
@@ -217,6 +213,7 @@ export class MemoireService {
         statut: true,
         titre: true,
         resume: true,
+        domaineId: true,
         auteurEncadreurId: true,
         encadreurs: { select: { encadreurId: true } },
         motsCles: { select: { motCle: { select: { libelle: true } } } },
@@ -254,15 +251,11 @@ export class MemoireService {
     let motCleIds: string[] | undefined;
     if (dto.motsCles !== undefined) {
       const saisis = !!dto.motsCles.length;
-      const motsClesBruts = this.normaliserMotsCles(
-        saisis ? dto.motsCles! : await this.aiService.extractKeywords(titre, resume),
-      );
-      // UNESCO → upsert MotCle (mode dégradé automatique : ne lance pas d'erreur si l'API est KO)
-      // Si les mots-clés sont auto-extraits, on applique la sélection AUTO_KEYWORDS_SELECTION
-      const assoc = await this.motCleUnescoService.resolveAndUpsert(
-        motsClesBruts,
-        saisis ? undefined : AUTO_KEYWORDS_SELECTION,
-      );
+      const domaineId = dto.domaineId ?? existing.domaineId;
+      // Saisis : descripteur si trouvé, sinon mot libre. Vide : génération auto (6 descripteurs visés)
+      const assoc = saisis
+        ? await this.thesaurusKeywords.resolveAndUpsert(this.normaliserMotsCles(dto.motsCles), { domaineId })
+        : await this.autoKeywords.generateAndUpsert(titre, resume, domaineId);
       motsCles = assoc.libelles;
       motCleIds = assoc.motCleIds;
     }
@@ -326,7 +319,7 @@ export class MemoireService {
   /* Recherche par mot-clé any|all */
   async searchByKeyword(dto: SearchMemoireDto, user?: { id: string; role: string }) {
     const { q, mode, annee, typeDiplome, universiteId, domaineId, page } = dto;
-    const limit = 6;
+    const limit = 9;
     const skip = (page - 1) * limit;
 
     const and: any[] = [{ statut: StatutMemoire.VALIDE }];
@@ -394,7 +387,7 @@ export class MemoireService {
       include: {
         universite: { select: { nom: true, sigle: true } },
         domaine: { select: { nom: true } },
-        motsCles: { include: { motCle: { select: { id: true, libelle: true, unescoUri: true, isUnesco: true } } } },
+        motsCles: { include: { motCle: { select: { id: true, libelle: true, descripteurUri: true, thesaurus: true } } } },
         encadreurs: { include: { encadreur: true } },
       },
     });

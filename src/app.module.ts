@@ -4,6 +4,7 @@ import { AppService } from './app.service.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { PasswordResetModule } from './pswd-reset/password-reset.module.js';
 import { EncadreurModule } from './encadreur/encadreur.module.js';
 import { SearchModule } from './search/search.module.js';
 import { GraphModule } from './graph/graph.module.js';
@@ -25,6 +26,7 @@ import { ConfigModule } from '@nestjs/config';
     StorageModule,
     AuditModule,
     AuthModule,
+    PasswordResetModule,
     EncadreurModule,
     SearchModule,
     GraphModule,

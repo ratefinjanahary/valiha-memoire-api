@@ -30,6 +30,31 @@ enum TypeDiplome {
   DOCTORAT
 }
 
+enum Thesaurus {
+  UNESCO
+  EUROVOC
+  RAMEAU
+  AGROVOC
+  MESH
+  GETTY_AAT
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  // SHA-256 du token. Le token en clair n'est JAMAIS stocké (seulement dans l'e-mail).
+  tokenHash String   @unique @map("token_hash")
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Cascade : si l'user est supprimé, ses tokens partent avec lui
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt]) // utile pour le nettoyage périodique des tokens expirés
+  @@map("password_reset_tokens")
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -40,6 +65,10 @@ model User {
   isActif      Boolean  @default(true) @map("is_actif")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
+
+
+  passwordChangedAt  DateTime? @map("password_changed_at")
+  passwordResetTokens PasswordResetToken[]
 
   memoiresSoumis Memoire[]  @relation("AuteurSoumission")
   historiqueLogs AuditLog[]
@@ -88,18 +117,16 @@ model MotCle {
   id        String   @id @default(uuid())
   libelle   String   @unique
 
-  /// URI canonique du descripteur UNESCO (ex. http://vocabularies.unesco.org/thesaurus/concept1234).
-  /// NULL = mot-clé libre. @unique : Postgres autorise plusieurs NULL, mais un seul enregistrement par descripteur.
-  unescoUri String?  @unique @map("unesco_uri")
+  /// URI canonique du descripteur (le thésaurus d'origine est dans `thesaurus`). NULL = mot-clé libre.
+  /// @unique : un seul enregistrement par descripteur (Postgres autorise plusieurs NULL).
+  descripteurUri String? @unique @map("descripteur_uri")
 
-  /// true = libellé issu du Thésaurus UNESCO ; false = mot-clé libre (non trouvé ou API indisponible)
-  isUnesco  Boolean  @default(false) @map("is_unesco")
-
+  /// Thésaurus d'origine du descripteur. NULL = mot-clé libre (non trouvé ou API indisponible).
+  thesaurus Thesaurus?
   createdAt DateTime @default(now()) @map("created_at")
+  memoires  MemoireMotCle[]
 
-  memoires MemoireMotCle[]
-
-  @@index([isUnesco])
+  @@index([thesaurus])
   @@map("mots_cles")
 }
 

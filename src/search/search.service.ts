@@ -1,8 +1,6 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { GoogleAiService } from './google-ai.service.js';
-import { StatutMemoire } from '../generated/prisma/client.js';
-import { SearchQueryDto } from './dto/search-query.dto.js';
 
 @Injectable()
 export class SearchService {
