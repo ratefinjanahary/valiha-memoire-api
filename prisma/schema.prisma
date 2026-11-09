@@ -55,6 +55,22 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+model PasswordResetCode {
+  id        String   @id @default(uuid())
+  // HMAC-SHA256 du code (clé serveur + userId). Le code en clair n'est JAMAIS stocké.
+  // Pas de @unique : un code à 6 chiffres peut légitimement exister chez plusieurs users.
+  codeHash  String   @map("code_hash")
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("password_reset_codes")
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -69,6 +85,7 @@ model User {
 
   passwordChangedAt  DateTime? @map("password_changed_at")
   passwordResetTokens PasswordResetToken[]
+  passwordResetCodes PasswordResetCode[]
 
   memoiresSoumis Memoire[]  @relation("AuteurSoumission")
   historiqueLogs AuditLog[]

@@ -15,6 +15,10 @@ import { DomaineModule } from './domaine/domaine.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { MotCleModule } from './mot-cle/mot-cle.module.js';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { APP_PIPE } from '@nestjs/core';
+import { ZodValidationPipe } from 'nestjs-zod';
 
 @Module({
   imports: [
@@ -22,6 +26,7 @@ import { ConfigModule } from '@nestjs/config';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 30 }]),
     PrismaModule,
     StorageModule,
     AuditModule,
@@ -37,6 +42,10 @@ import { ConfigModule } from '@nestjs/config';
     MotCleModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_PIPE, useClass: ZodValidationPipe }
+  ],
 })
 export class AppModule {}

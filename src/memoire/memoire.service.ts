@@ -20,6 +20,7 @@ import { AuditAction } from '../common/audit.actions.js';
 import type { UpdateMemoireInput, ListModerationQuery } from './dto/memoire.validator.dto.js';
 import { ThesaurusKeywordService } from '../thesaurus/thesaurus-keyword.service.js';
 import { AutoKeywordsService } from './auto-keywords.service.js';
+import { buildEmbeddingText } from '../search/embedding-text.util.js';
 
 @Injectable()
 export class MemoireService {
@@ -65,7 +66,7 @@ export class MemoireService {
   /** Génère et stocke l'embedding. Non bloquant : un échec est juste loggé. */
   private async refreshEmbedding(memoireId: string, titre: string, resume: string, motsCles: string[]) {
     try {
-      const textToEmbed = `${titre}. ${resume}. Mots-clés : ${motsCles.join(', ')}`;
+      const textToEmbed = buildEmbeddingText({ titre, resume, motsCles });
       const embedding = await this.aiService.generateEmbedding(textToEmbed, 'RETRIEVAL_DOCUMENT');
       if (embedding && embedding.length > 0) {
         const embeddingString = `[${embedding.join(',')}]`;
@@ -89,7 +90,7 @@ export class MemoireService {
     const encadreurIds = [...new Set(data.encadreurIds)];
     await this.assertEncadreursValides(encadreurIds, data.auteurEncadreurId);
 
-    const pdfUrl = file ? await this.fileStorage.uploadFile(file, 'memoires') : null;
+    const pdfUrl = null;
 
     let memoire: Memoire;
     let resume = resumeSaisi ?? '';
@@ -98,17 +99,11 @@ export class MemoireService {
     /* 1 - Création du mémoire en BD. Si quelque chose plante, on supprime le PDF de Drive. */
     try {
       if (!resume && file) {
-        try {
-          const parser = new PDFParse({ data: file.buffer });
-          try {
-            const { text } = await parser.getText();
-            const t = text.trim();
-            resume = t.length > 1000 ? t.substring(0, 1000) + '...' : t;
-          } finally {
-            await parser.destroy();
-          }
-        } catch (error) {
-          this.logger.error('Failed to parse PDF', error);
+        resume = await this.aiService.summarizePdf(file.buffer, data.titre);
+        if (!resume) {
+          throw new BadRequestException(
+            'Impossible de générer un résumé à partir du PDF : saisissez-le manuellement.',
+          );
         }
       }
 

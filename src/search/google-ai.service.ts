@@ -2,21 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GoogleGenAI, Type } from '@google/genai';
 
 export interface ExtractKeywordsOptions {
-  /** Nombre total de candidats (défaut 10) */
-  total?: number;
-  /** Dont termes génériques (défaut 6) ; le reste = termes précis */
-  generic?: number;
-  /** Thésaurus visé, pour orienter la formulation (ex. « de l'UNESCO », « EuroVoc (Union européenne) ») */
-  thesaurusName?: string;
+  total?: number; /** Nombre total de candidats (défaut 10) */
+  generic?: number; /** Dont termes génériques (défaut 6) ; le reste = termes précis */
+  thesaurusName?: string; /** Thésaurus visé, pour orienter la formulation (ex. « de l'UNESCO », « EuroVoc (Union européenne) ») */
 }
 
 export interface SelectDescriptorsInput {
   titre: string;
   resume: string;
-  /** Liste FERMÉE de libellés de descripteurs parmi lesquels choisir */
-  pool: string[];
-  /** Descripteurs déjà retenus (à ne pas répéter) */
-  already: string[];
+  pool: string[]; /** Liste FERMÉE de libellés de descripteurs parmi lesquels choisir */
+  already: string[]; /** Descripteurs déjà retenus (à ne pas répéter) */
   count: number;
 }
 
@@ -86,6 +81,36 @@ export class GoogleAiService {
     } catch (e: any) {
       this.logger.warn(`Keyword extraction failed: ${e?.message}`);
       return []; // non bloquant : la soumission continue sans mots-clés
+    }
+  }
+
+  async summarizePdf(pdf: Buffer, titre: string): Promise<string> {
+    try {
+      const response = await this.ai.models.generateContent({
+        model: this.textModel,
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { inlineData: { mimeType: 'application/pdf', data: pdf.toString('base64') } },
+              { text: `Titre du mémoire : ${titre}` },
+            ],
+          },
+        ],
+        config: {
+          systemInstruction:
+            'Tu es documentaliste. Rédige en français un résumé de 120 à 180 mots de ce mémoire : ' +
+            'problématique, méthode, principaux résultats. ' +
+            'Ignore la page de garde, les remerciements, la table des matières et la bibliographie. ' +
+            "N'invente rien : appuie-toi uniquement sur le document. " +
+            'Réponds en texte brut, sans titre ni liste.',
+          temperature: 0.2,
+        },
+      });
+      return response.text?.trim() ?? '';
+    } catch (e: any) {
+      this.logger.warn(`PDF summarization failed: ${e?.message}`);
+      return ''; // l'appelant décide quoi faire
     }
   }
 
