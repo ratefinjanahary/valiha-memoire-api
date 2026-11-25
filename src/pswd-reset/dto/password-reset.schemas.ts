@@ -25,10 +25,9 @@ export type ResetPasswordInput = z.infer<typeof ResetPasswordSchema>;
 export const ForgotPasswordOtpSchema = ForgotPasswordSchema;
 export type ForgotPasswordOtpInput = ForgotPasswordInput;
 
-export const ResetPasswordOtpSchema = z.object({
+export const VerifyOtpSchema = z.object({
   email: z.email({ message: 'Email invalide' }).trim(),
   // Exactement 6 chiffres (randomInt(100000, 1000000))
   code: z.string().regex(/^\d{6}$/, { message: 'Le code doit contenir 6 chiffres' }),
-  newPassword: passwordField,
 });
-export type ResetPasswordOtpInput = z.infer<typeof ResetPasswordOtpSchema>;
+export type VerifyOtpInput = z.infer<typeof VerifyOtpSchema>;

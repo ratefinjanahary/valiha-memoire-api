@@ -138,17 +138,14 @@ export class MemoireService {
         },
       });
     } catch (error) {
-      // Rollback : pas de PDF orphelin sur Drive
       if (pdfUrl) await this.fileStorage.deleteFile(pdfUrl);
       throw error;
     }
-
-    /* 2 - Embedding : non bloquant */
     await this.refreshEmbedding(memoire.id, data.titre, resume, motsCles);
-
     this.auditService.log(AuditAction.SUBMIT_MEMOIRE, userId, `memoireId:${memoire.id}`);
 
     return memoire;
+    
   }
 
   /* updateStatus — branché sur l'audit */
@@ -199,13 +196,12 @@ export class MemoireService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  /* Modification d'un mémoire BROUILLON / EN_ATTENTE_MODERATION / REJETTE (le statut n'est pas modifié ici) */
+  /* Modification d'un mémoire, quel que soit son statut (le statut n'est pas modifié ici) */
   async updateMemoire(id: string, dto: UpdateMemoireInput, userId?: string) {
     const existing = await this.prisma.memoire.findUnique({
       where: { id },
       select: {
         id: true,
-        statut: true,
         titre: true,
         resume: true,
         domaineId: true,
@@ -312,7 +308,7 @@ export class MemoireService {
   }
 
   /* Recherche par mot-clé any|all */
-  async searchByKeyword(dto: SearchMemoireDto, user?: { id: string; role: string }) {
+  async searchByKeyword(dto: SearchMemoireDto) {
     const { q, mode, annee, typeDiplome, universiteId, domaineId, page } = dto;
     const limit = 9;
     const skip = (page - 1) * limit;
@@ -401,7 +397,9 @@ export class MemoireService {
           },
         });
       } catch (e) {
-        this.logger.error(`Échec enregistrement consultation (mémoire ${id})`, e instanceof Error ? e.stack : e);
+        this
+          .logger
+          .error(`Échec enregistrement consultation (mémoire ${id})`, e instanceof Error ? e.stack : e);
       }
     }
 

@@ -10,7 +10,7 @@ const ANNEE_MIN = 1950;
 export const updateMemoireSchema = z
   .object({
     titre: z.string().trim().min(3, 'Titre trop court').max(300, 'Titre trop long (300 max)'),
-    resume: z.string().trim().min(1, 'Le résumé ne peut pas être vide').max(20000, 'Résumé trop long'),
+    resume: z.string().trim().min(1, 'Le résumé ne peut pas être vide').max(20000, 'Résumé trop long').optional(),
     anneeSoutenance: z.coerce
       .number()
       .int('Année invalide')
@@ -22,7 +22,6 @@ export const updateMemoireSchema = z
     auteurEmail: z.string().trim().toLowerCase().email('Email invalide').max(255).nullable(),
     universiteId: z.uuid('universiteId invalide'),
     domaineId: z.uuid('domaineId invalide'),
-    /** null = l'auteur n'est pas un encadreur enregistré */
     auteurEncadreurId: z.uuid('auteurEncadreurId invalide').nullable(),
     /** Remplace la liste complète des encadreurs */
     encadreurIds: z.array(z.uuid('encadreurId invalide')).min(1, 'Au moins un encadreur').max(10),

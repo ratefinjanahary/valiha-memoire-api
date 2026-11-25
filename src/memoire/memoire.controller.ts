@@ -102,7 +102,7 @@ export class MemoireController {
     @Query() query: SearchMemoireDto,
     @Request() req: any,
   ) {
-    return this.memoireService.searchByKeyword(query, req.user);
+    return this.memoireService.searchByKeyword(query);
   }
 
   @Get('memoires/top')

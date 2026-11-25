@@ -6,11 +6,11 @@ import {
   ForgotPasswordSchema,
   ResetPasswordSchema,
   ForgotPasswordOtpSchema,
-  ResetPasswordOtpSchema,
+  VerifyOtpSchema,
   type ForgotPasswordInput,
   type ResetPasswordInput,
   type ForgotPasswordOtpInput,
-  type ResetPasswordOtpInput,
+  type VerifyOtpInput,
 } from './dto/password-reset.schemas.js';
 
 // Même préfixe que AuthController : Nest accepte plusieurs controllers sur le même préfixe
@@ -50,12 +50,13 @@ export class PasswordResetController {
   }
 
   // Les 5 essais max par code sont appliqués dans le service ; @Throttle = filet par IP.
+  // Renvoie un jeton à usage unique, à utiliser ensuite sur POST /auth/reset-password.
   // @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  @Post('reset-password-otp')
+  @Post('verify-otp')
   @HttpCode(HttpStatus.OK)
-  resetPasswordOtp(
-    @Body(new ZodValidationPipe(ResetPasswordOtpSchema)) body: ResetPasswordOtpInput,
+  verifyOtp(
+    @Body(new ZodValidationPipe(VerifyOtpSchema)) body: VerifyOtpInput,
   ) {
-    return this.passwordResetService.resetPasswordOtp(body);
+    return this.passwordResetService.verifyOtp(body);
   }
 }

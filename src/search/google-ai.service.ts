@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 
 export interface ExtractKeywordsOptions {
   total?: number; /** Nombre total de candidats (défaut 10) */
@@ -20,7 +20,10 @@ export class GoogleAiService {
   private readonly logger = new Logger(GoogleAiService.name);
   private readonly ai: GoogleGenAI;
   private readonly embeddingModel = 'gemini-embedding-001';
-  private readonly textModel = 'gemini-2.5-flash'; // ou le flash courant
+  private readonly textModel = 'gemini-2.5-flash';
+  // Principal d'abord, secours ensuite (un modèle saturé ne l'est pas forcément en même temps que l'autre)
+  private readonly summaryModels = ['gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+  private readonly sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   constructor() {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -28,6 +31,15 @@ export class GoogleAiService {
       this.logger.warn('Google Gen AI API key is not configured properly.');
     }
     this.ai = new GoogleGenAI({ apiKey: apiKey || 'dummy-key' });
+  }
+
+  /** Erreurs temporaires côté Google : surcharge, quota, timeout, réseau */
+  private isTransient(e: any): boolean {
+    const status = Number(e?.status ?? e?.code);
+    if ([429, 500, 502, 503, 504].includes(status)) return true;
+    return /UNAVAILABLE|RESOURCE_EXHAUSTED|DEADLINE_EXCEEDED|high demand|overloaded|timeout|fetch failed/i.test(
+      e?.message ?? '',
+    );
   }
 
   async generateEmbedding(
@@ -85,33 +97,47 @@ export class GoogleAiService {
   }
 
   async summarizePdf(pdf: Buffer, titre: string): Promise<string> {
-    try {
-      const response = await this.ai.models.generateContent({
-        model: this.textModel,
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { inlineData: { mimeType: 'application/pdf', data: pdf.toString('base64') } },
-              { text: `Titre du mémoire : ${titre}` },
-            ],
-          },
+    // Base64 calculé une seule fois (le PDF peut être lourd)
+    const contents = [
+      {
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType: 'application/pdf', data: pdf.toString('base64') } },
+          { text: `Titre du mémoire : ${titre}` },
         ],
-        config: {
-          systemInstruction:
-            'Tu es documentaliste. Rédige en français un résumé de 120 à 180 mots de ce mémoire : ' +
-            'problématique, méthode, principaux résultats. ' +
-            'Ignore la page de garde, les remerciements, la table des matières et la bibliographie. ' +
-            "N'invente rien : appuie-toi uniquement sur le document. " +
-            'Réponds en texte brut, sans titre ni liste.',
-          temperature: 0.2,
-        },
-      });
-      return response.text?.trim() ?? '';
-    } catch (e: any) {
-      this.logger.warn(`PDF summarization failed: ${e?.message}`);
-      return ''; // l'appelant décide quoi faire
+      },
+    ];
+    const config = {
+      systemInstruction:
+        'Tu es documentaliste. Rédige en français un résumé de 120 à 150 mots de ce mémoire : ' +
+        'problématique, méthode, principaux résultats. ' +
+        "Appuie-toi surtout sur l'introduction, la conclusion et les chapitres de résultats. " +
+        'Ignore la page de garde, les remerciements, la table des matières et la bibliographie. ' +
+        "N'invente rien : appuie-toi uniquement sur le document. " +
+        'Ne dépasse pas 130 mots. Réponds en texte brut, sans titre ni liste.',
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      httpOptions: { timeout: 60_000 }, // un modèle qui rame ne doit pas bloquer la soumission
+    };
+
+    for (const model of this.summaryModels) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const response = await this.ai.models.generateContent({ model, contents, config });
+          const text = response.text?.trim();
+          if (text) {
+            if (model !== this.summaryModels[0]) this.logger.log(`PDF summarized with fallback model ${model}`);
+            return text;
+          }
+          this.logger.warn(`${model} returned an empty summary`);
+          break; // réponse vide : on passe au modèle suivant
+        } catch (e: any) {
+          this.logger.warn(`PDF summarization failed on ${model} (attempt ${attempt}): ${e?.message}`);
+          if (!this.isTransient(e)) break; // erreur non temporaire : inutile de réessayer ce modèle
+          if (attempt < 2) await this.sleep(1500);
+        }
+      }
     }
+    return ''; // l'appelant décide quoi faire (saisie manuelle du résumé)
   }
 
   /**

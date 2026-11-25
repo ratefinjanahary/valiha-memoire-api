@@ -26,7 +26,7 @@ export class AuditService {
   }
 
   async findAll(page: number = 1) {
-    const limit = 5;
+    const limit = 8;
     const skip = (page - 1) * limit;
 
     const [total, data] = await Promise.all([

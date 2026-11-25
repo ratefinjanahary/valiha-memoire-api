@@ -11,7 +11,7 @@ import type {
   ForgotPasswordInput,
   ResetPasswordInput,
   ForgotPasswordOtpInput,
-  ResetPasswordOtpInput,
+  VerifyOtpInput,
 } from './dto/password-reset.schemas.js';
 
 // ─── Flux par lien ───
@@ -25,6 +25,7 @@ const OTP_TTL_MS = 10 * 60 * 1000; // 10 min
 const OTP_MAX_ATTEMPTS = 5;
 const OTP_MAX_REQUESTS_PER_HOUR = 3; // par utilisateur
 const OTP_COOLDOWN_MS = 60 * 1000;
+const OTP_RESET_TOKEN_TTL_MS = 10 * 60 * 1000; // validité du jeton émis après vérification du code
 const HOUR_MS = 60 * 60 * 1000;
 const GENERIC_OTP_MESSAGE =
   "Si un compte correspond à cet e-mail, un code de vérification vient d'être envoyé.";
@@ -223,8 +224,14 @@ export class PasswordResetService {
     this.auditService.log(AuditAction.FORGOT_PASSWORD, user.id, 'otp_requested');
   }
 
-  // ─── POST /auth/reset-password-otp ────────────────────────────
-  async resetPasswordOtp({ email, code, newPassword }: ResetPasswordOtpInput) {
+  // ─── POST /auth/verify-otp ────────────────────────────────────
+  /**
+   * Étape 1 du flux OTP : vérifie le code reçu par e-mail. Le mot de passe N'EST PAS modifié ici.
+   * Seulement si le code existe, n'est pas expiré et correspond : il est consommé (usage unique)
+   * et on émet un jeton de réinitialisation à courte durée de vie. Le client l'échange ensuite
+   * contre le nouveau mot de passe via POST /auth/reset-password (même endpoint que le flux par lien).
+   */
+  async verifyOtp({ email, code }: VerifyOtpInput) {
     // Message unique pour tous les échecs (inconnu / expiré / trop d'essais / mauvais code)
     const invalid = () => new BadRequestException('Code invalide ou expiré');
 
@@ -264,19 +271,28 @@ export class PasswordResetService {
       throw invalid();
     }
 
-    const passwordHash = await this.hashPassword(newPassword);
+    const rawToken = randomBytes(32).toString('hex'); // même format que le flux par lien (64 hex)
 
     await this.prisma.$transaction(async (tx) => {
-      // Usage unique : consommation par DELETE conditionnel (cf. flux par lien)
+      // Usage unique : le code est consommé par DELETE conditionnel (anti race-condition).
+      // Deux requêtes parallèles avec le bon code : une seule obtient count === 1.
       const claimed = await tx.passwordResetCode.deleteMany({
         where: { id: record.id, expiresAt: { gt: new Date() } },
       });
       if (claimed.count !== 1) throw invalid(); // rollback
 
-      await this.applyPasswordChange(tx, user.id, passwordHash);
+      // Un seul jeton actif par utilisateur
+      await tx.passwordResetToken.deleteMany({ where: { userId: user.id } });
+      await tx.passwordResetToken.create({
+        data: {
+          tokenHash: sha256(rawToken),
+          userId: user.id,
+          expiresAt: new Date(Date.now() + OTP_RESET_TOKEN_TTL_MS),
+        },
+      });
     });
 
-    this.auditService.log(AuditAction.RESET_PASSWORD, user.id, 'otp_password_reset_done');
-    return { message: 'Mot de passe réinitialisé avec succès' };
+    this.auditService.log(AuditAction.FORGOT_PASSWORD, user.id, 'otp_verified');
+    return { resetToken: rawToken };
   }
 }

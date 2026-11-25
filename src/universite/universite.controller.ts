@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { UniversiteService } from './universite.service.js';
 import { CreateUniversiteDto } from './dto/create-universite.dto.js';
+import { FindUniversitesQueryDto } from './dto/find-universites-query.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 
 @Controller('api/universites')
@@ -14,7 +15,7 @@ export class UniversiteController {
   }
 
   @Get()
-  findAll() {
-    return this.universiteService.findAll();
+  findAll(@Query() query: FindUniversitesQueryDto) {
+    return this.universiteService.findAll(query);
   }
 }

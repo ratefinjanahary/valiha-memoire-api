@@ -21,15 +21,11 @@ export class AuthService {
     const existingUser = await this.prisma.user.findUnique({
       where: { email: data.email },
     });
-
     if (existingUser) {
       throw new ConflictException('Cet email est déjà utilisé');
     }
-
     const hashedPassword = await bcrypt.hash(data.password, 10);
-
     const roleToAssign = data.role === Role.ETUDIANT ? Role.ETUDIANT : Role.PUBLIC;
-
     const user = await this.prisma.user.create({
       data: {
         email: data.email,
@@ -39,8 +35,6 @@ export class AuthService {
         role: roleToAssign,
       },
     });
-
-    // Audit : inscription
     this.auditService.log(AuditAction.REGISTER, user.id, `email:${user.email}`);
 
     return this.generateToken(user);
@@ -50,18 +44,13 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },
     });
-
     if (!user || !user.isActif) {
       throw new UnauthorizedException('Identifiants invalides ou compte inactif');
     }
-
     const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
-
     if (!isPasswordValid) {
       throw new UnauthorizedException('Identifiants invalides');
     }
-
-    // Audit : connexion réussie
     this.auditService.log(AuditAction.LOGIN, user.id, `email:${user.email}`);
 
     return this.generateToken(user);

@@ -51,6 +51,7 @@ export class SearchService {
       if (best < floor) return [];
 
       return rows.filter((r) => r.similarity >= best - maxGap).slice(0, 10);
+    
     } catch (error: any) {
       this.logger.error(`Semantic search failed: ${error?.message}`, error?.stack);
       throw new InternalServerErrorException(error?.message || 'Semantic search failed');
